@@ -653,13 +653,22 @@ impl AscClient {
     }
 
     pub fn list_certificates(&self) -> Result<Vec<Certificate>> {
+        self.list_certificates_with_fields(
+            "certificateType,displayName,serialNumber,expirationDate,activated",
+        )
+    }
+
+    pub fn list_certificates_with_content(&self) -> Result<Vec<Certificate>> {
+        self.list_certificates_with_fields(
+            "certificateType,displayName,serialNumber,expirationDate,certificateContent,activated",
+        )
+    }
+
+    fn list_certificates_with_fields(&self, fields: &str) -> Result<Vec<Certificate>> {
         self.get_paginated(
             format!("{}/certificates", asc_base_url()),
             vec![
-                (
-                    "fields[certificates]".into(),
-                    "certificateType,displayName,serialNumber,expirationDate,activated".into(),
-                ),
+                ("fields[certificates]".into(), fields.into()),
                 ("limit".into(), "200".into()),
             ],
         )

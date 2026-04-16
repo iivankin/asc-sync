@@ -107,11 +107,12 @@ fn revoke_scope(
 
     let certificates = scoped_certificates(state, scope);
     for (name, certificate) in certificates {
-        if current_certificates
-            .iter()
-            .any(|current| current.id == certificate.apple_id)
+        if let Some(apple_id) = certificate.apple_id.as_deref()
+            && current_certificates
+                .iter()
+                .any(|current| current.id == apple_id)
         {
-            client.revoke_certificate(&certificate.apple_id)?;
+            client.revoke_certificate(apple_id)?;
         }
         state.certs.remove(&name);
         changes.push(RevokeChange {
@@ -150,7 +151,7 @@ fn scoped_certificates(
 fn managed_certificate_scope(kind: &str) -> Option<Scope> {
     match kind {
         "DEVELOPMENT" => Some(Scope::Developer),
-        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION" | "MAC_INSTALLER_DISTRIBUTION" => {
+        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION_G2" | "DEVELOPER_ID_INSTALLER" => {
             Some(Scope::Release)
         }
         _ => None,
@@ -199,7 +200,7 @@ mod tests {
         state.certs.insert(
             "dev".into(),
             ManagedCertificate {
-                apple_id: "dev-cert".into(),
+                apple_id: Some("dev-cert".into()),
                 kind: "DEVELOPMENT".into(),
                 name: "Dev".into(),
                 serial_number: "serial-dev".into(),
@@ -209,7 +210,7 @@ mod tests {
         state.certs.insert(
             "dist".into(),
             ManagedCertificate {
-                apple_id: "dist-cert".into(),
+                apple_id: Some("dist-cert".into()),
                 kind: "DISTRIBUTION".into(),
                 name: "Dist".into(),
                 serial_number: "serial-dist".into(),
@@ -219,8 +220,8 @@ mod tests {
         state.certs.insert(
             "installer".into(),
             ManagedCertificate {
-                apple_id: "installer-cert".into(),
-                kind: "MAC_INSTALLER_DISTRIBUTION".into(),
+                apple_id: None,
+                kind: "DEVELOPER_ID_INSTALLER".into(),
                 name: "Installer".into(),
                 serial_number: "serial-installer".into(),
                 p12_password: "secret-installer".into(),

@@ -925,7 +925,7 @@ fn validate_artifact_completeness(
 fn managed_certificate_scope(kind: &str) -> Option<Scope> {
     match kind {
         "DEVELOPMENT" => Some(Scope::Developer),
-        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION" | "MAC_INSTALLER_DISTRIBUTION" => {
+        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION_G2" | "DEVELOPER_ID_INSTALLER" => {
             Some(Scope::Release)
         }
         _ => None,
@@ -1061,7 +1061,7 @@ mod tests {
         state.certs.insert(
             "dev".into(),
             ManagedCertificate {
-                apple_id: "cert".into(),
+                apple_id: Some("cert".into()),
                 kind: "DEVELOPMENT".into(),
                 name: "Dev".into(),
                 serial_number: "serial".into(),
@@ -1150,7 +1150,7 @@ mod tests {
         state_a.certs.insert(
             "dev".into(),
             ManagedCertificate {
-                apple_id: "cert-a".into(),
+                apple_id: Some("cert-a".into()),
                 kind: "DEVELOPMENT".into(),
                 name: "Dev".into(),
                 serial_number: "serial-a".into(),
@@ -1174,7 +1174,7 @@ mod tests {
         state_b.certs.insert(
             "dist".into(),
             ManagedCertificate {
-                apple_id: "cert-b".into(),
+                apple_id: Some("cert-b".into()),
                 kind: "DISTRIBUTION".into(),
                 name: "Dist".into(),
                 serial_number: "serial-b".into(),
@@ -1239,7 +1239,7 @@ mod tests {
         state_a.certs.insert(
             "dev".into(),
             ManagedCertificate {
-                apple_id: "cert-a".into(),
+                apple_id: Some("cert-a".into()),
                 kind: "DEVELOPMENT".into(),
                 name: "Dev".into(),
                 serial_number: "serial-a".into(),
@@ -1262,7 +1262,7 @@ mod tests {
         state_b.certs.insert(
             "dev".into(),
             ManagedCertificate {
-                apple_id: "cert-b".into(),
+                apple_id: Some("cert-b".into()),
                 kind: "DEVELOPMENT".into(),
                 name: "Dev".into(),
                 serial_number: "serial-b".into(),

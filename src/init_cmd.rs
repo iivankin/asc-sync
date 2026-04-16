@@ -27,7 +27,7 @@ fn select_team_id_from_auth_store() -> Result<String> {
     let team_ids = auth_store::stored_team_ids()?;
     match team_ids.len() {
         0 => bail!(
-            "no imported App Store Connect auth entries found; run `asc-sync auth import` first or pass --team-id explicitly"
+            "no imported App Store Connect auth entries found; import auth first or pass --team-id explicitly"
         ),
         1 => Ok(team_ids[0].clone()),
         _ => prompt_team_selection(&team_ids),

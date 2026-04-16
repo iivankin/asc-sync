@@ -17,8 +17,12 @@ Current certificate support is intentionally limited to the modern unified types
 - `developer_id_application`
 - `developer_id_installer`
 
-`developer_id_installer` maps to App Store Connect's `MAC_INSTALLER_DISTRIBUTION` certificate
-type. It is for signing `.pkg` installers and is not referenced by provisioning profiles.
+- `developer_id_application` is for signing macOS apps outside the Mac App Store. `asc-sync`
+  tracks it internally as `DEVELOPER_ID_APPLICATION_G2`, but `apply` uses a manual CSR flow:
+  it generates a CSR, asks you to create the certificate in the Apple Developer portal, then
+  downloads the issued certificate from App Store Connect and imports it into the signing bundle.
+- `developer_id_installer` is for signing installer packages outside the Mac App Store. It uses
+  the same manual CSR flow and is not referenced by provisioning profiles.
 
 ## Auth Import
 
@@ -223,6 +227,14 @@ On the first `apply`, if `signing.ascbundle` does not exist yet, `asc-sync`:
 - prints them once in the terminal
 - stores them in `~/.asc-sync/bundle-passwords/`
 - creates `signing.ascbundle` next to `asc.json`
+
+When `apply` needs to create a `developer_id_application` or `developer_id_installer` certificate,
+it pauses in an interactive terminal, prints the generated CSR path, asks you to create the
+matching Developer ID certificate in Certificates, Identifiers & Profiles, and then polls
+App Store Connect until the new certificate appears so it can download and import it automatically.
+
+For `developer_id_application`, `apply` also expects Apple to expose the new certificate back
+through the API so `mac_app_direct` provisioning profiles can reference it.
 
 Import signing material on a new machine or in CI:
 

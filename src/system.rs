@@ -28,12 +28,18 @@ const BUNDLE_PASSWORDS_DIR_NAME: &str = "bundle-passwords";
 pub struct GeneratedCsr {
     _tempdir: tempfile::TempDir,
     pub key_path: PathBuf,
+    pub csr_path: PathBuf,
     pub csr_pem: String,
 }
 
 pub fn login_keychain_path() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME is not set")?;
     Ok(PathBuf::from(home).join("Library/Keychains/login.keychain-db"))
+}
+
+pub fn downloads_dir() -> Result<PathBuf> {
+    let home = std::env::var("HOME").context("HOME is not set")?;
+    Ok(PathBuf::from(home).join("Downloads"))
 }
 
 pub fn provisioning_profiles_dir() -> Result<PathBuf> {
@@ -69,6 +75,7 @@ pub fn generate_csr(common_name: &str) -> Result<GeneratedCsr> {
     Ok(GeneratedCsr {
         _tempdir: tempdir,
         key_path,
+        csr_path,
         csr_pem,
     })
 }
@@ -127,6 +134,32 @@ pub fn create_pkcs12_bytes(
     let tempdir = tempfile::tempdir().context("failed to create temporary PKCS#12 output")?;
     let output_path = tempdir.path().join("certificate.p12");
     create_pkcs12(key_path, certificate_der_base64, &output_path, password)?;
+    fs::read(&output_path).with_context(|| format!("failed to read {}", output_path.display()))
+}
+
+pub fn certificate_der_base64_matches_private_key(
+    certificate_der_base64: &str,
+    key_path: &Path,
+) -> Result<bool> {
+    let certificate_der = STANDARD
+        .decode(certificate_der_base64)
+        .context("failed to decode certificateContent from ASC")?;
+    let tempdir =
+        tempfile::tempdir().context("failed to create temporary certificate matching dir")?;
+    let certificate_path = tempdir.path().join("certificate.cer");
+    fs::write(&certificate_path, certificate_der)
+        .with_context(|| format!("failed to write {}", certificate_path.display()))?;
+    certificate_matches_private_key(&certificate_path, key_path)
+}
+
+pub fn create_pkcs12_bytes_from_certificate_file(
+    key_path: &Path,
+    certificate_path: &Path,
+    password: &str,
+) -> Result<Vec<u8>> {
+    let tempdir = tempfile::tempdir().context("failed to create temporary PKCS#12 output")?;
+    let output_path = tempdir.path().join("certificate.p12");
+    create_pkcs12_from_certificate_file(key_path, certificate_path, &output_path, password)?;
     fs::read(&output_path).with_context(|| format!("failed to read {}", output_path.display()))
 }
 
@@ -269,6 +302,63 @@ pub fn provisioning_profile_is_expired(profile_bytes: &[u8]) -> Result<bool> {
 
     let expiration_time: SystemTime = expiration.to_owned().into();
     Ok(expiration_time <= SystemTime::now())
+}
+
+pub fn find_certificate_file_matching_private_key(
+    search_dir: &Path,
+    key_path: &Path,
+) -> Result<Option<PathBuf>> {
+    if !search_dir.exists() {
+        return Ok(None);
+    }
+
+    let mut matches = Vec::new();
+    for entry in fs::read_dir(search_dir)
+        .with_context(|| format!("failed to read {}", search_dir.display()))?
+    {
+        let entry = entry.with_context(|| format!("failed to read {}", search_dir.display()))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(extension) = path.extension().and_then(|extension| extension.to_str()) else {
+            continue;
+        };
+        if !matches!(extension, "cer" | "crt" | "pem") {
+            continue;
+        }
+        if certificate_matches_private_key(&path, key_path)? {
+            let modified = entry
+                .metadata()
+                .with_context(|| format!("failed to read metadata for {}", path.display()))?
+                .modified()
+                .with_context(|| format!("failed to read modified time for {}", path.display()))?;
+            matches.push((modified, path));
+        }
+    }
+
+    matches.sort_by_key(|(modified, _)| *modified);
+    Ok(matches.pop().map(|(_, path)| path))
+}
+
+pub fn read_certificate_serial_number_from_file(certificate_path: &Path) -> Result<String> {
+    let output = run_certificate_command(
+        certificate_path,
+        &["-serial", "-noout"],
+        "failed to inspect certificate serial number",
+    )?;
+    let serial = String::from_utf8(output.stdout)
+        .context("certificate serial number is not valid UTF-8")?
+        .trim()
+        .strip_prefix("serial=")
+        .unwrap_or_default()
+        .to_owned();
+    ensure!(
+        !serial.is_empty(),
+        "certificate {} is missing a serial number",
+        certificate_path.display()
+    );
+    Ok(serial)
 }
 
 pub fn load_cached_bundle_password(bundle_path: &Path, scope: Scope) -> Result<Option<String>> {
@@ -444,4 +534,244 @@ fn der_to_pem(der: &[u8]) -> String {
     }
     pem.push_str("-----END CERTIFICATE-----\n");
     pem
+}
+
+fn create_pkcs12_from_certificate_file(
+    key_path: &Path,
+    certificate_path: &Path,
+    output_path: &Path,
+    password: &str,
+) -> Result<()> {
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+
+    let tempdir = tempfile::tempdir().context("failed to create temporary PKCS#12 directory")?;
+    let certificate_pem_path = tempdir.path().join("certificate.pem");
+    let certificate_pem = read_certificate_pem_from_file(certificate_path).with_context(|| {
+        format!(
+            "failed to convert downloaded certificate {} to PEM",
+            certificate_path.display()
+        )
+    })?;
+    fs::write(&certificate_pem_path, certificate_pem.as_bytes()).with_context(|| {
+        format!(
+            "failed to write temporary certificate {}",
+            certificate_pem_path.display()
+        )
+    })?;
+
+    let status = Command::new("openssl")
+        .arg("pkcs12")
+        .arg("-export")
+        .arg("-inkey")
+        .arg(key_path)
+        .arg("-in")
+        .arg(&certificate_pem_path)
+        .arg("-out")
+        .arg(output_path)
+        .arg("-passout")
+        .arg(format!("pass:{password}"))
+        .status()
+        .context("failed to execute openssl pkcs12")?;
+
+    ensure!(
+        status.success(),
+        "openssl pkcs12 failed with status {status}"
+    );
+    set_private_permissions(output_path)?;
+    Ok(())
+}
+
+fn certificate_matches_private_key(certificate_path: &Path, key_path: &Path) -> Result<bool> {
+    let certificate_public_key = run_certificate_command(
+        certificate_path,
+        &["-pubkey", "-noout"],
+        "failed to extract certificate public key",
+    )?;
+    let private_key_public_key = Command::new("openssl")
+        .arg("pkey")
+        .arg("-in")
+        .arg(key_path)
+        .arg("-pubout")
+        .output()
+        .context("failed to extract public key from private key")?;
+    ensure!(
+        private_key_public_key.status.success(),
+        "openssl pkey failed: {}",
+        String::from_utf8_lossy(&private_key_public_key.stderr)
+    );
+    Ok(certificate_public_key.stdout == private_key_public_key.stdout)
+}
+
+fn read_certificate_pem_from_file(certificate_path: &Path) -> Result<String> {
+    let output = run_certificate_command(
+        certificate_path,
+        &["-outform", "PEM"],
+        "failed to convert certificate to PEM",
+    )?;
+    String::from_utf8(output.stdout).context("certificate PEM is not valid UTF-8")
+}
+
+fn run_certificate_command(
+    certificate_path: &Path,
+    extra_args: &[&str],
+    failure_context: &str,
+) -> Result<std::process::Output> {
+    for format in [CertificateFileFormat::Der, CertificateFileFormat::Pem] {
+        let mut command = Command::new("openssl");
+        command.arg("x509");
+        if matches!(format, CertificateFileFormat::Der) {
+            command.arg("-inform").arg("DER");
+        }
+        command.arg("-in").arg(certificate_path);
+        for argument in extra_args {
+            command.arg(argument);
+        }
+
+        let output = command.output().with_context(|| {
+            format!(
+                "{failure_context} while executing openssl x509 on {}",
+                certificate_path.display()
+            )
+        })?;
+        if output.status.success() {
+            return Ok(output);
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "{failure_context}: {} is neither a valid DER nor PEM certificate",
+        certificate_path.display()
+    ))
+}
+
+enum CertificateFileFormat {
+    Der,
+    Pem,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, process::Command};
+
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use tempfile::tempdir;
+
+    use super::{
+        certificate_der_base64_matches_private_key, create_pkcs12_bytes,
+        create_pkcs12_bytes_from_certificate_file, find_certificate_file_matching_private_key,
+        generate_csr, pkcs12_is_expired, read_certificate_serial_number_from_file,
+    };
+
+    #[test]
+    fn finds_downloaded_certificate_matching_private_key_and_builds_pkcs12() {
+        let generated = generate_csr("ASC Sync Installer Test").unwrap();
+        let downloads = tempdir().unwrap();
+        let matching_certificate = downloads.path().join("matching.cer");
+
+        let status = Command::new("openssl")
+            .arg("x509")
+            .arg("-req")
+            .arg("-in")
+            .arg(&generated.csr_path)
+            .arg("-signkey")
+            .arg(&generated.key_path)
+            .arg("-days")
+            .arg("1")
+            .arg("-out")
+            .arg(&matching_certificate)
+            .arg("-outform")
+            .arg("DER")
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let other_generated = generate_csr("ASC Sync Other").unwrap();
+        let other_certificate = downloads.path().join("other.cer");
+        let status = Command::new("openssl")
+            .arg("x509")
+            .arg("-req")
+            .arg("-in")
+            .arg(&other_generated.csr_path)
+            .arg("-signkey")
+            .arg(&other_generated.key_path)
+            .arg("-days")
+            .arg("1")
+            .arg("-out")
+            .arg(&other_certificate)
+            .arg("-outform")
+            .arg("DER")
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let matched =
+            find_certificate_file_matching_private_key(downloads.path(), &generated.key_path)
+                .unwrap()
+                .unwrap();
+        assert_eq!(matched, matching_certificate);
+
+        let serial = read_certificate_serial_number_from_file(&matching_certificate).unwrap();
+        assert!(!serial.is_empty());
+
+        let pkcs12 = create_pkcs12_bytes_from_certificate_file(
+            &generated.key_path,
+            &matching_certificate,
+            "secret",
+        )
+        .unwrap();
+        assert!(!pkcs12.is_empty());
+        assert!(!pkcs12_is_expired(&pkcs12, "secret").unwrap());
+
+        fs::remove_file(matching_certificate).unwrap();
+        fs::remove_file(other_certificate).unwrap();
+    }
+
+    #[test]
+    fn matches_certificate_content_from_asc_to_private_key() {
+        let generated = generate_csr("ASC Sync Application Test").unwrap();
+        let tempdir = tempdir().unwrap();
+        let certificate_path = tempdir.path().join("matching.cer");
+
+        let status = Command::new("openssl")
+            .arg("x509")
+            .arg("-req")
+            .arg("-in")
+            .arg(&generated.csr_path)
+            .arg("-signkey")
+            .arg(&generated.key_path)
+            .arg("-days")
+            .arg("1")
+            .arg("-out")
+            .arg(&certificate_path)
+            .arg("-outform")
+            .arg("DER")
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let certificate_der = fs::read(&certificate_path).unwrap();
+        let certificate_content = STANDARD.encode(certificate_der);
+
+        assert!(
+            certificate_der_base64_matches_private_key(&certificate_content, &generated.key_path)
+                .unwrap()
+        );
+
+        let other_generated = generate_csr("ASC Sync Other").unwrap();
+        assert!(
+            !certificate_der_base64_matches_private_key(
+                &certificate_content,
+                &other_generated.key_path
+            )
+            .unwrap()
+        );
+
+        let pkcs12 =
+            create_pkcs12_bytes(&generated.key_path, &certificate_content, "secret").unwrap();
+        assert!(!pkcs12.is_empty());
+        assert!(!pkcs12_is_expired(&pkcs12, "secret").unwrap());
+    }
 }

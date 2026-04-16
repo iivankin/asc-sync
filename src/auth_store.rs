@@ -109,7 +109,7 @@ pub fn resolve_auth_record(team_id: &str) -> Result<StoredAuthRecord> {
     }
 
     bail!(
-        "no App Store Connect auth configured for team {team_id}; run `asc-sync auth import` or set {ISSUER_ID_ENV}, {KEY_ID_ENV}, and one of {PRIVATE_KEY_ENV}/{PRIVATE_KEY_PATH_ENV}"
+        "no App Store Connect auth configured for team {team_id}; import auth first or set {ISSUER_ID_ENV}, {KEY_ID_ENV}, and one of {PRIVATE_KEY_ENV}/{PRIVATE_KEY_PATH_ENV}"
     );
 }
 

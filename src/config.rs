@@ -409,13 +409,38 @@ impl DeviceFamily {
 }
 
 impl CertificateKind {
-    pub fn asc_value(self) -> &'static str {
+    pub fn managed_kind(self) -> &'static str {
         match self {
             Self::Development => "DEVELOPMENT",
             Self::Distribution => "DISTRIBUTION",
-            Self::DeveloperIdApplication => "DEVELOPER_ID_APPLICATION",
-            Self::DeveloperIdInstaller => "MAC_INSTALLER_DISTRIBUTION",
+            Self::DeveloperIdApplication => "DEVELOPER_ID_APPLICATION_G2",
+            Self::DeveloperIdInstaller => "DEVELOPER_ID_INSTALLER",
         }
+    }
+
+    pub fn asc_create_value(self) -> Option<&'static str> {
+        match self {
+            Self::Development => Some("DEVELOPMENT"),
+            Self::Distribution => Some("DISTRIBUTION"),
+            Self::DeveloperIdApplication => None,
+            Self::DeveloperIdInstaller => None,
+        }
+    }
+
+    pub fn is_manually_provisioned(self) -> bool {
+        self.asc_create_value().is_none()
+    }
+
+    pub fn manual_portal_display_name(self) -> Option<&'static str> {
+        match self {
+            Self::DeveloperIdApplication => Some("Developer ID Application"),
+            Self::DeveloperIdInstaller => Some("Developer ID Installer"),
+            Self::Development | Self::Distribution => None,
+        }
+    }
+
+    pub fn allows_missing_apple_id(self) -> bool {
+        matches!(self, Self::DeveloperIdInstaller)
     }
 
     pub fn scope(self) -> Scope {
@@ -810,7 +835,7 @@ impl<'de> Deserialize<'de> for CapabilitySpec {
 
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use super::{CertificateKind, Config};
 
     #[test]
     fn accepts_published_schema_field() {
@@ -975,6 +1000,40 @@ mod tests {
         .unwrap();
 
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn developer_id_application_uses_g2_manual_provisioning() {
+        assert_eq!(
+            CertificateKind::DeveloperIdApplication.managed_kind(),
+            "DEVELOPER_ID_APPLICATION_G2"
+        );
+        assert_eq!(
+            CertificateKind::DeveloperIdApplication.asc_create_value(),
+            None
+        );
+        assert_eq!(
+            CertificateKind::DeveloperIdApplication.manual_portal_display_name(),
+            Some("Developer ID Application")
+        );
+        assert!(!CertificateKind::DeveloperIdApplication.allows_missing_apple_id());
+    }
+
+    #[test]
+    fn developer_id_installer_requires_manual_provisioning() {
+        assert_eq!(
+            CertificateKind::DeveloperIdInstaller.managed_kind(),
+            "DEVELOPER_ID_INSTALLER"
+        );
+        assert_eq!(
+            CertificateKind::DeveloperIdInstaller.asc_create_value(),
+            None
+        );
+        assert_eq!(
+            CertificateKind::DeveloperIdInstaller.manual_portal_display_name(),
+            Some("Developer ID Installer")
+        );
+        assert!(CertificateKind::DeveloperIdInstaller.allows_missing_apple_id());
     }
 
     #[test]

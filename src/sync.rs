@@ -1,6 +1,9 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    io::{self, IsTerminal},
     path::{Path, PathBuf},
+    thread,
+    time::Duration,
 };
 
 use anyhow::{Result, ensure};
@@ -13,6 +16,14 @@ use crate::{
     state::{ManagedBundleId, ManagedCertificate, ManagedDevice, ManagedProfile, State},
     system,
 };
+
+struct PreparedCertificate {
+    apple_id: Option<String>,
+    kind: String,
+    serial_number: String,
+    p12_password: String,
+    pkcs12: Vec<u8>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -516,22 +527,51 @@ impl<'a> SyncEngine<'a> {
             let managed = self.state.certs.get(&logical_name).cloned();
             let mut needs_rotation = false;
             if let Some(managed) = &managed {
-                let existing_remote = current_certificates
-                    .iter()
-                    .find(|certificate| certificate.id == managed.apple_id);
+                let existing_remote = managed.apple_id.as_deref().and_then(|apple_id| {
+                    current_certificates
+                        .iter()
+                        .find(|certificate| certificate.id == apple_id)
+                });
                 let remote_invalid = match existing_remote {
                     Some(certificate) => !certificate.is_active()?,
                     None => false,
                 };
-                needs_rotation = existing_remote.is_none()
+                let local_missing = self.workspace.cert_bytes(&logical_name).is_none()
+                    || self.workspace.cert_password(&logical_name).is_none();
+                let local_expired = if spec.kind.is_manually_provisioned() && !local_missing {
+                    let pkcs12 = self
+                        .workspace
+                        .cert_bytes(&logical_name)
+                        .expect("local_missing guards PKCS#12 access");
+                    let p12_password = self
+                        .workspace
+                        .cert_password(&logical_name)
+                        .expect("local_missing guards password access");
+                    system::pkcs12_is_expired(pkcs12, p12_password)?
+                } else {
+                    false
+                };
+                let remote_missing = if spec.kind.is_manually_provisioned() {
+                    false
+                } else {
+                    existing_remote.is_none() || managed.apple_id.is_none()
+                };
+                needs_rotation = remote_missing
                     || remote_invalid
-                    || managed.kind != spec.kind.asc_value()
+                    || local_expired
+                    || managed.kind != spec.kind.managed_kind()
                     || managed.name != spec.name
-                    || self.workspace.cert_bytes(&logical_name).is_none();
+                    || local_missing;
             }
 
             if !needs_rotation && let Some(managed) = managed {
-                certificate_ids.insert(logical_name.clone(), managed.apple_id.clone());
+                certificate_ids.insert(
+                    logical_name.clone(),
+                    managed
+                        .apple_id
+                        .clone()
+                        .unwrap_or_else(|| format!("local-cert-{logical_name}")),
+                );
                 continue;
             }
 
@@ -545,46 +585,39 @@ impl<'a> SyncEngine<'a> {
                 self.record(
                     ChangeKind::Create,
                     format!("cert.{logical_name}"),
-                    spec.kind.asc_value().into(),
+                    spec.kind.to_string(),
                 );
             }
 
             if self.mode == Mode::Apply {
-                let generated = system::generate_csr(&spec.name)?;
-                let certificate = self
-                    .client
-                    .create_certificate(spec.kind.asc_value(), &generated.csr_pem)?;
-                let p12_password = random_password();
-                let pkcs12 = system::create_pkcs12_bytes(
-                    &generated.key_path,
-                    &certificate.attributes.certificate_content,
-                    &p12_password,
-                )?;
-                system::import_pkcs12_bytes_into_login_keychain(
-                    &logical_name,
-                    &pkcs12,
-                    &p12_password,
-                )?;
-                self.workspace.set_cert(logical_name.clone(), pkcs12);
+                let prepared = prepare_certificate(self.client, &logical_name, &spec)?;
                 self.workspace
-                    .set_cert_password(logical_name.clone(), p12_password.clone());
+                    .set_cert(logical_name.clone(), prepared.pkcs12.clone());
+                self.workspace
+                    .set_cert_password(logical_name.clone(), prepared.p12_password.clone());
 
                 let previous = self.state.certs.insert(
                     logical_name.clone(),
                     ManagedCertificate {
-                        apple_id: certificate.id.clone(),
-                        kind: spec.kind.asc_value().into(),
+                        apple_id: prepared.apple_id.clone(),
+                        kind: prepared.kind,
                         name: spec.name.clone(),
-                        serial_number: certificate.attributes.serial_number.clone(),
-                        p12_password,
+                        serial_number: prepared.serial_number,
+                        p12_password: prepared.p12_password,
                     },
                 );
                 if let Some(previous) = previous
-                    && previous.apple_id != certificate.id
+                    && previous.apple_id != prepared.apple_id
+                    && let Some(previous_apple_id) = previous.apple_id.as_deref()
                 {
-                    self.client.revoke_certificate(&previous.apple_id)?;
+                    self.client.revoke_certificate(previous_apple_id)?;
                 }
-                certificate_ids.insert(logical_name.clone(), certificate.id);
+                certificate_ids.insert(
+                    logical_name.clone(),
+                    prepared
+                        .apple_id
+                        .unwrap_or_else(|| format!("local-cert-{logical_name}")),
+                );
             } else {
                 certificate_ids
                     .insert(logical_name.clone(), format!("planned-cert-{logical_name}"));
@@ -772,11 +805,12 @@ impl<'a> SyncEngine<'a> {
                 "removed from config".into(),
             );
             if self.mode == Mode::Apply
+                && let Some(apple_id) = certificate.apple_id.as_deref()
                 && current_certificates
                     .iter()
-                    .any(|current| current.id == certificate.apple_id)
+                    .any(|current| current.id == apple_id)
             {
-                self.client.revoke_certificate(&certificate.apple_id)?;
+                self.client.revoke_certificate(apple_id)?;
             }
             if self.mode == Mode::Apply {
                 self.state.certs.remove(&name);
@@ -953,10 +987,108 @@ fn random_password() -> String {
 fn managed_certificate_scope(kind: &str) -> Option<Scope> {
     match kind {
         "DEVELOPMENT" => Some(Scope::Developer),
-        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION" | "MAC_INSTALLER_DISTRIBUTION" => {
+        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION_G2" | "DEVELOPER_ID_INSTALLER" => {
             Some(Scope::Release)
         }
         _ => None,
+    }
+}
+
+fn prepare_certificate(
+    client: &AscClient,
+    logical_name: &str,
+    spec: &crate::config::CertificateSpec,
+) -> Result<PreparedCertificate> {
+    if spec.kind.is_manually_provisioned() {
+        return prepare_manual_developer_id_certificate(client, logical_name, spec);
+    }
+
+    let generated = system::generate_csr(&spec.name)?;
+    let certificate_type = spec
+        .kind
+        .asc_create_value()
+        .expect("automatic certificate kinds always have an ASC create value");
+    let certificate = client.create_certificate(certificate_type, &generated.csr_pem)?;
+    let p12_password = random_password();
+    let pkcs12 = system::create_pkcs12_bytes(
+        &generated.key_path,
+        &certificate.attributes.certificate_content,
+        &p12_password,
+    )?;
+    system::import_pkcs12_bytes_into_login_keychain(logical_name, &pkcs12, &p12_password)?;
+
+    Ok(PreparedCertificate {
+        apple_id: Some(certificate.id),
+        kind: spec.kind.managed_kind().into(),
+        serial_number: certificate.attributes.serial_number,
+        p12_password,
+        pkcs12,
+    })
+}
+
+fn prepare_manual_developer_id_certificate(
+    client: &AscClient,
+    logical_name: &str,
+    spec: &crate::config::CertificateSpec,
+) -> Result<PreparedCertificate> {
+    let display_name = spec
+        .kind
+        .manual_portal_display_name()
+        .expect("manual certificate kinds always have a portal display name");
+    ensure!(
+        io::stdout().is_terminal() && io::stderr().is_terminal(),
+        "cert {logical_name} of type {} requires an interactive terminal; rerun `apply` in a terminal",
+        spec.kind
+    );
+
+    let generated = system::generate_csr(&spec.name)?;
+    let certificate =
+        wait_for_manual_developer_id_certificate(client, logical_name, display_name, &generated)?;
+    let p12_password = random_password();
+    let pkcs12 = system::create_pkcs12_bytes(
+        &generated.key_path,
+        &certificate.attributes.certificate_content,
+        &p12_password,
+    )?;
+    system::import_pkcs12_bytes_into_login_keychain(logical_name, &pkcs12, &p12_password)?;
+
+    Ok(PreparedCertificate {
+        apple_id: Some(certificate.id),
+        kind: spec.kind.managed_kind().into(),
+        serial_number: certificate.attributes.serial_number,
+        p12_password,
+        pkcs12,
+    })
+}
+
+fn wait_for_manual_developer_id_certificate(
+    client: &AscClient,
+    logical_name: &str,
+    display_name: &str,
+    generated: &system::GeneratedCsr,
+) -> Result<Certificate> {
+    println!("Manual action required for cert {logical_name}.");
+    println!("Create a {display_name} certificate in Certificates, Identifiers & Profiles.");
+    println!("Upload this CSR file: {}", generated.csr_path.display());
+    println!(
+        "Waiting for App Store Connect to publish the new certificate so asc-sync can download it automatically."
+    );
+
+    loop {
+        let certificates = client.list_certificates_with_content()?;
+        for certificate in certificates {
+            if certificate.attributes.certificate_content.is_empty() {
+                continue;
+            }
+            if system::certificate_der_base64_matches_private_key(
+                &certificate.attributes.certificate_content,
+                &generated.key_path,
+            )? {
+                return Ok(certificate);
+            }
+        }
+
+        thread::sleep(Duration::from_secs(5));
     }
 }
 

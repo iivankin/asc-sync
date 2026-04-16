@@ -34,7 +34,8 @@ pub struct ManagedDevice {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManagedCertificate {
-    pub apple_id: String,
+    #[serde(default)]
+    pub apple_id: Option<String>,
     pub kind: String,
     pub name: String,
     pub serial_number: String,

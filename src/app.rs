@@ -511,13 +511,32 @@ fn validate_live_signing_state(client: &AscClient, state: &State) -> Result<()> 
     }
 
     for (logical_name, certificate) in &state.certs {
-        let live = certificates.get(&certificate.apple_id).ok_or_else(|| {
-            anyhow::anyhow!("certificate {logical_name} is missing in App Store Connect")
-        })?;
-        ensure!(
-            live.is_active()?,
-            "certificate {logical_name} is inactive or expired in App Store Connect"
-        );
+        let live = certificate
+            .apple_id
+            .as_deref()
+            .and_then(|apple_id| certificates.get(apple_id))
+            .or_else(|| {
+                certificates.values().find(|live| {
+                    live.attributes
+                        .serial_number
+                        .eq_ignore_ascii_case(&certificate.serial_number)
+                })
+            });
+        if certificate.apple_id.is_some() {
+            let live = live.ok_or_else(|| {
+                anyhow::anyhow!("certificate {logical_name} is missing in App Store Connect")
+            })?;
+            ensure!(
+                live.is_active()?,
+                "certificate {logical_name} is inactive or expired in App Store Connect"
+            );
+        } else if let Some(live) = live {
+            // Manual Developer ID certificates may not expose an ASC certificate ID.
+            ensure!(
+                live.is_active()?,
+                "certificate {logical_name} is inactive or expired in App Store Connect"
+            );
+        }
     }
 
     for (logical_name, profile) in &state.profiles {
@@ -559,7 +578,7 @@ fn signing_scopes_in_state(state: &State) -> Vec<Scope> {
 fn managed_certificate_scope(kind: &str) -> Option<Scope> {
     match kind {
         "DEVELOPMENT" => Some(Scope::Developer),
-        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION" | "MAC_INSTALLER_DISTRIBUTION" => {
+        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION_G2" | "DEVELOPER_ID_INSTALLER" => {
             Some(Scope::Release)
         }
         _ => None,
