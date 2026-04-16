@@ -1,0 +1,25 @@
+pub mod app;
+pub mod asc;
+pub mod auth;
+pub mod auth_store;
+pub mod build_settings;
+pub mod bundle;
+pub mod bundle_team;
+pub mod cli;
+pub mod config;
+pub mod config_edit;
+pub mod config_io;
+pub mod device;
+pub mod device_discovery;
+pub mod device_server;
+pub mod init_cmd;
+pub mod notarize;
+pub mod revoke;
+pub mod schema;
+pub mod scope;
+pub mod state;
+pub mod submit;
+pub mod sync;
+pub mod system;
+
+pub use app::run;

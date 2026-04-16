@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - "v*"
+  pull_request:
+
+jobs:
+  rust:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Typecheck
+        run: cargo check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+  upload-versioned-schemas:
+    needs: rust
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve package version
+        id: package-version
+        run: |
+          version="$(python3 - <<'PY'
+          import pathlib, tomllib
+          with open(pathlib.Path('Cargo.toml'), 'rb') as fh:
+              cargo = tomllib.load(fh)
+          print(cargo['package']['version'])
+          PY
+          )"
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify schema upload secrets
+        env:
+          CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_R2_BUCKET: ${{ secrets.CLOUDFLARE_R2_BUCKET }}
+          CLOUDFLARE_R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+        run: |
+          : "${CLOUDFLARE_R2_ACCESS_KEY_ID:?missing CLOUDFLARE_R2_ACCESS_KEY_ID secret}"
+          : "${CLOUDFLARE_R2_SECRET_ACCESS_KEY:?missing CLOUDFLARE_R2_SECRET_ACCESS_KEY secret}"
+          : "${CLOUDFLARE_R2_BUCKET:?missing CLOUDFLARE_R2_BUCKET secret}"
+          : "${CLOUDFLARE_R2_ENDPOINT:?missing CLOUDFLARE_R2_ENDPOINT secret}"
+
+      - name: Upload versioned schemas to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          CLOUDFLARE_R2_BUCKET: ${{ secrets.CLOUDFLARE_R2_BUCKET }}
+          CLOUDFLARE_R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+          ASC_SYNC_VERSION: ${{ steps.package-version.outputs.value }}
+        run: |
+          shopt -s nullglob
+          for schema in schema/*.json; do
+            name="$(basename "$schema" .json)"
+            versioned_name="${name}-${ASC_SYNC_VERSION}.json"
+            temp_schema="$(mktemp)"
+            python3 - "$schema" "$temp_schema" "$versioned_name" <<'PY'
+          import json
+          import sys
+
+          source_path, output_path, versioned_name = sys.argv[1:]
+          with open(source_path, "r", encoding="utf-8") as fh:
+              schema = json.load(fh)
+          schema["$id"] = f"https://orbitstorage.dev/schemas/{versioned_name}"
+          with open(output_path, "w", encoding="utf-8") as fh:
+              json.dump(schema, fh, indent=2)
+              fh.write("\n")
+          PY
+            aws s3 cp \
+              "$temp_schema" \
+              "s3://${CLOUDFLARE_R2_BUCKET}/schemas/${versioned_name}" \
+              --endpoint-url "$CLOUDFLARE_R2_ENDPOINT" \
+              --content-type application/json \
+              --cache-control "public, max-age=31536000, immutable"
+            rm -f "$temp_schema"
+          done

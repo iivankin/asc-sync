@@ -1,0 +1,18 @@
+use serde_json::{Value, json};
+
+pub const PUBLISHED_SCHEMA_URL: &str = concat!(
+    "https://orbitstorage.dev/schemas/asc-sync.schema-",
+    env!("CARGO_PKG_VERSION"),
+    ".json"
+);
+
+pub fn init_config_template(team_id: &str) -> Value {
+    json!({
+        "$schema": PUBLISHED_SCHEMA_URL,
+        "teamId": team_id,
+        "bundleIds": {},
+        "devices": {},
+        "certs": {},
+        "profiles": {},
+    })
+}
