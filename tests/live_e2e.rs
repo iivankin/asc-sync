@@ -157,8 +157,8 @@ impl LiveCase {
         if let Some(schema) = schema {
             root.insert("$schema".into(), Value::String(schema.to_owned()));
         }
-        root.insert("teamId".into(), Value::String(self.env.team_id.clone()));
-        root.insert("bundleIds".into(), json!({}));
+        root.insert("team_id".into(), Value::String(self.env.team_id.clone()));
+        root.insert("bundle_ids".into(), json!({}));
         root.insert("devices".into(), json!({}));
         root.insert("certs".into(), json!({}));
         root.insert("profiles".into(), json!({}));
@@ -246,7 +246,7 @@ fn live_cli_macos_roundtrip_uses_env_auth_and_bundle() {
 
     let init_config = device_case.read_config_json();
     assert_eq!(
-        init_config.get("teamId").and_then(Value::as_str),
+        init_config.get("team_id").and_then(Value::as_str),
         Some(env.team_id.as_str())
     );
     assert!(
@@ -294,10 +294,10 @@ fn live_cli_macos_roundtrip_uses_env_auth_and_bundle() {
     let schema = schema_from_config(&case.read_config_json()).map(str::to_owned);
     let config = json!({
         "$schema": schema,
-        "teamId": env.team_id,
-        "bundleIds": {
+        "team_id": env.team_id,
+        "bundle_ids": {
             "live-app": {
-                "bundleId": bundle_id,
+                "bundle_id": bundle_id,
                 "name": format!("ASC Sync Live {suffix}"),
                 "platform": "mac_os",
                 "capabilities": ["in_app_purchase"]
@@ -317,7 +317,7 @@ fn live_cli_macos_roundtrip_uses_env_auth_and_bundle() {
             "mac-store": {
                 "name": format!("ASC Sync Mac Store {suffix}"),
                 "type": "mac_app_store",
-                "bundleId": "live-app",
+                "bundle_id": "live-app",
                 "certs": ["dist-cert"]
             }
         }
@@ -329,7 +329,7 @@ fn live_cli_macos_roundtrip_uses_env_auth_and_bundle() {
 
     let plan = case.run(&["plan", "--config", case.config_path.to_str().unwrap()]);
     assert!(
-        plan.stdout.contains("bundleId.live-app")
+        plan.stdout.contains("bundle_id.live-app")
             && plan.stdout.contains("cert.dev-cert")
             && plan.stdout.contains("cert.dist-cert")
             && plan.stdout.contains("profile.mac-store"),
@@ -342,7 +342,7 @@ fn live_cli_macos_roundtrip_uses_env_auth_and_bundle() {
     case.run(&["validate", "--config", case.config_path.to_str().unwrap()]);
 
     let mut drifted_config = case.read_config_json();
-    drifted_config["bundleIds"]["live-app"]["capabilities"] =
+    drifted_config["bundle_ids"]["live-app"]["capabilities"] =
         json!(["in_app_purchase", "associated_domains"]);
     case.write_config_json(&drifted_config);
 
@@ -350,7 +350,7 @@ fn live_cli_macos_roundtrip_uses_env_auth_and_bundle() {
     assert!(
         second_plan
             .stdout
-            .contains("bundleId.live-app.capability.ASSOCIATED_DOMAINS"),
+            .contains("bundle_id.live-app.capability.ASSOCIATED_DOMAINS"),
         "unexpected second plan output:\n{}\n{}",
         second_plan.stdout,
         second_plan.stderr
@@ -363,7 +363,7 @@ fn live_cli_macos_roundtrip_uses_env_auth_and_bundle() {
     assert_eq!(state.team_id, env.team_id);
     assert_eq!(
         state.bundle_ids["live-app"].bundle_id, bundle_id,
-        "apply should persist managed bundleId"
+        "apply should persist managed bundle_id"
     );
     assert!(
         state.certs.contains_key("dev-cert") && state.certs.contains_key("dist-cert"),

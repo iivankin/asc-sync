@@ -30,7 +30,7 @@ pub fn run(args: &SubmitArgs) -> Result<()> {
         .find_bundle_id_by_identifier(&bundle_spec.bundle_id)?
         .with_context(|| {
             format!(
-                "bundleId {} ({}) does not exist in App Store Connect; run `asc-sync apply` first",
+                "bundle_id {} ({}) does not exist in App Store Connect; run `asc-sync apply` first",
                 logical_name, bundle_spec.bundle_id
             )
         })?;
@@ -63,7 +63,7 @@ pub fn run(args: &SubmitArgs) -> Result<()> {
     );
 
     println!(
-        "Submitted {} for bundleId {} using {} upload flow.",
+        "Submitted {} for bundle_id {} using {} upload flow.",
         args.file.display(),
         bundle_spec.bundle_id,
         upload_mode
@@ -83,17 +83,17 @@ fn resolve_bundle_spec<'a>(
         let spec = config
             .bundle_ids
             .get(logical_name)
-            .ok_or_else(|| anyhow::anyhow!("unknown bundleId logical key {logical_name}"))?;
+            .ok_or_else(|| anyhow::anyhow!("unknown bundle_id logical key {logical_name}"))?;
         return Ok((logical_name, spec));
     }
 
     let mut bundle_ids = config.bundle_ids.iter();
     let Some((logical_name, spec)) = bundle_ids.next() else {
-        bail!("submit requires at least one bundleId in asc.json");
+        bail!("submit requires at least one bundle_id in asc.json");
     };
     ensure!(
         bundle_ids.next().is_none(),
-        "submit requires --bundle-id when asc.json contains multiple bundleIds"
+        "submit requires --bundle-id when asc.json contains multiple bundle_ids"
     );
     Ok((logical_name.as_str(), spec))
 }

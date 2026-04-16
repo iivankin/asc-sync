@@ -4,6 +4,8 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
+const STATE_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct State {
     pub version: u32,
@@ -57,7 +59,7 @@ pub struct ManagedProfile {
 impl State {
     pub fn new(team_id: &str) -> Self {
         Self {
-            version: 4,
+            version: STATE_VERSION,
             team_id: team_id.to_owned(),
             bundle_ids: BTreeMap::new(),
             devices: BTreeMap::new(),
@@ -99,7 +101,7 @@ impl State {
 
     fn validate_format(&self) -> Result<()> {
         ensure!(
-            self.version == 4,
+            self.version == STATE_VERSION,
             "unsupported state version {}",
             self.version
         );

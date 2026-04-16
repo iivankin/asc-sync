@@ -4,24 +4,24 @@
   "title": "asc-sync config",
   "type": "object",
   "additionalProperties": false,
-  "required": ["teamId"],
+  "required": ["team_id"],
   "properties": {
     "$schema": {
       "type": "string",
       "description": "Version-pinned published schema URL from https://orbitstorage.dev/schemas/."
     },
-    "teamId": {
+    "team_id": {
       "type": "string",
       "minLength": 1
     },
-    "bundleIds": {
+    "bundle_ids": {
       "type": "object",
       "default": {},
       "propertyNames": {
         "$ref": "#/$defs/nonEmptyKey"
       },
       "additionalProperties": {
-        "$ref": "#/$defs/bundleId"
+        "$ref": "#/$defs/bundle_id"
       }
     },
     "devices": {
@@ -61,12 +61,12 @@
       "minLength": 1,
       "pattern": "^(?!(?:\\.|\\.\\.)$)[A-Za-z0-9._-]+$"
     },
-    "bundleId": {
+    "bundle_id": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["bundleId", "name", "platform"],
+      "required": ["bundle_id", "name", "platform"],
       "properties": {
-        "bundleId": {
+        "bundle_id": {
           "type": "string",
           "minLength": 1
         },
@@ -128,7 +128,7 @@
     "profile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "type", "bundleId", "certs"],
+      "required": ["name", "type", "bundle_id", "certs"],
       "properties": {
         "name": {
           "type": "string",
@@ -153,7 +153,7 @@
             "mac_catalyst_app_direct"
           ]
         },
-        "bundleId": {
+        "bundle_id": {
           "type": "string",
           "minLength": 1
         },
@@ -255,9 +255,9 @@
             "apple_id_auth": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["appConsent"],
+              "required": ["app_consent"],
               "properties": {
-                "appConsent": {
+                "app_consent": {
                   "type": "string",
                   "enum": ["primary_app_consent"]
                 }

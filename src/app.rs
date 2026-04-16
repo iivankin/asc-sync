@@ -483,11 +483,11 @@ fn validate_live_signing_state(client: &AscClient, state: &State) -> Result<()> 
 
     for (logical_name, bundle_id) in &state.bundle_ids {
         let live = bundle_ids.get(&bundle_id.apple_id).ok_or_else(|| {
-            anyhow::anyhow!("bundleId {logical_name} is missing in App Store Connect")
+            anyhow::anyhow!("bundle_id {logical_name} is missing in App Store Connect")
         })?;
         ensure!(
             live.attributes.identifier == bundle_id.bundle_id,
-            "bundleId {logical_name} points to {}, but App Store Connect now reports {}",
+            "bundle_id {logical_name} points to {}, but App Store Connect now reports {}",
             bundle_id.bundle_id,
             live.attributes.identifier
         );

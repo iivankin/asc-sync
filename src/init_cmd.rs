@@ -40,7 +40,7 @@ fn prompt_team_selection(team_ids: &[String]) -> Result<String> {
         "`init` requires an interactive terminal when multiple imported team IDs exist; pass --team-id explicitly"
     );
 
-    println!("Select teamId for asc.json:");
+    println!("Select team_id for asc.json:");
     for (index, team_id) in team_ids.iter().enumerate() {
         println!("  {}. {}", index + 1, team_id);
     }

@@ -10,13 +10,12 @@ use serde_json::Value;
 use crate::scope::Scope;
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Config {
     #[serde(default, rename = "$schema")]
     pub schema: Option<String>,
-    #[serde(rename = "teamId")]
     pub team_id: String,
-    #[serde(default, rename = "bundleIds")]
+    #[serde(default)]
     pub bundle_ids: BTreeMap<String, BundleIdSpec>,
     #[serde(default)]
     pub devices: BTreeMap<String, DeviceSpec>,
@@ -27,9 +26,8 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct BundleIdSpec {
-    #[serde(rename = "bundleId")]
     pub bundle_id: String,
     pub name: String,
     pub platform: BundleIdPlatform,
@@ -54,12 +52,11 @@ pub struct CertificateSpec {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct ProfileSpec {
     pub name: String,
     #[serde(rename = "type")]
     pub kind: ProfileKind,
-    #[serde(rename = "bundleId")]
     pub bundle_id: String,
     pub certs: Vec<String>,
     #[serde(default)]
@@ -163,9 +160,8 @@ pub struct DataProtectionCapabilitySpec {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct AppleIdAuthCapabilitySpec {
-    #[serde(rename = "appConsent")]
     pub app_consent: AppleIdAuthAppConsent,
 }
 
@@ -211,17 +207,17 @@ pub struct CapabilityOption {
 
 impl Config {
     pub fn validate(&self) -> Result<()> {
-        ensure!(!self.team_id.trim().is_empty(), "teamId cannot be empty");
+        ensure!(!self.team_id.trim().is_empty(), "team_id cannot be empty");
 
         for (name, bundle_id) in &self.bundle_ids {
-            validate_logical_key("bundleId", name)?;
+            validate_logical_key("bundle_id", name)?;
             ensure!(
                 !bundle_id.bundle_id.trim().is_empty(),
-                "bundleId {name} bundleId cannot be empty"
+                "bundle_id {name} bundle_id cannot be empty"
             );
             ensure!(
                 !bundle_id.name.trim().is_empty(),
-                "bundleId {name} name cannot be empty"
+                "bundle_id {name} name cannot be empty"
             );
             validate_capabilities(name, &bundle_id.capabilities)?;
         }
@@ -254,7 +250,7 @@ impl Config {
             );
             let bundle_id = self.bundle_ids.get(&profile.bundle_id).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "profile {name} references unknown bundleId {}",
+                    "profile {name} references unknown bundle_id {}",
                     profile.bundle_id
                 )
             })?;
@@ -701,7 +697,7 @@ fn validate_capabilities(bundle_id_name: &str, capabilities: &[CapabilitySpec]) 
 
         ensure!(
             seen.insert(capability_type),
-            "bundleId {bundle_id_name} defines capability {capability_type} more than once"
+            "bundle_id {bundle_id_name} defines capability {capability_type} more than once"
         );
     }
 
@@ -750,7 +746,7 @@ fn validate_profile_bundle_id_platform(
 ) -> Result<()> {
     if !profile_kind.supports_bundle_id_platform(bundle_id_platform) {
         bail!(
-            "profile {profile_name} of type {} is incompatible with bundleId platform {}",
+            "profile {profile_name} of type {} is incompatible with bundle_id platform {}",
             profile_kind,
             bundle_id_platform
         );
@@ -816,7 +812,7 @@ mod tests {
         let config = serde_json::from_str::<Config>(
             r#"{
                 "$schema": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.0.json",
-                "teamId": "TEAM123"
+                "team_id": "TEAM123"
             }"#,
         )
         .unwrap();
@@ -829,12 +825,39 @@ mod tests {
     }
 
     #[test]
+    fn rejects_legacy_camel_case_fields() {
+        assert!(
+            serde_json::from_str::<Config>(
+                r#"{
+                    "teamId": "TEAM123"
+                }"#,
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<Config>(
+                r#"{
+                    "team_id": "TEAM123",
+                    "bundle_ids": {
+                        "main": {
+                            "bundleId": "com.example.app",
+                            "name": "App",
+                            "platform": "ios"
+                        }
+                    }
+                }"#,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn parses_multiple_profile_certificates() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
-                    "main": { "bundleId": "com.example.app", "name": "App", "platform": "ios" }
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "main": { "bundle_id": "com.example.app", "name": "App", "platform": "ios" }
                 },
                 "devices": {
                     "iphone": { "family": "ios", "udid": "abc", "name": "My Phone" }
@@ -847,7 +870,7 @@ mod tests {
                     "adhoc": {
                         "name": "Ad Hoc",
                         "type": "ios_app_adhoc",
-                        "bundleId": "main",
+                        "bundle_id": "main",
                         "certs": ["dist-a", "dist-b"],
                         "devices": ["iphone"]
                     }
@@ -864,16 +887,16 @@ mod tests {
     fn parses_configurable_capabilities() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
+                "team_id": "TEAM123",
+                "bundle_ids": {
                     "main": {
-                        "bundleId": "com.example.app",
+                        "bundle_id": "com.example.app",
                         "name": "App",
                         "platform": "ios",
                         "capabilities": [
                             { "icloud": { "version": "xcode_6" } },
                             { "data_protection": { "level": "protected_until_first_user_auth" } },
-                            { "apple_id_auth": { "appConsent": "primary_app_consent" } }
+                            { "apple_id_auth": { "app_consent": "primary_app_consent" } }
                         ]
                     }
                 }
@@ -889,10 +912,10 @@ mod tests {
     fn rejects_duplicate_capabilities() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
+                "team_id": "TEAM123",
+                "bundle_ids": {
                     "main": {
-                        "bundleId": "com.example.app",
+                        "bundle_id": "com.example.app",
                         "name": "App",
                         "platform": "ios",
                         "capabilities": [
@@ -912,9 +935,9 @@ mod tests {
     fn accepts_direct_distribution_profile() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
-                    "desktop": { "bundleId": "com.example.desktop", "name": "Desktop", "platform": "mac_os" }
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "desktop": { "bundle_id": "com.example.desktop", "name": "Desktop", "platform": "mac_os" }
                 },
                 "certs": {
                     "direct": { "type": "developer_id_application", "name": "Developer ID" }
@@ -923,7 +946,7 @@ mod tests {
                     "direct": {
                         "name": "Direct",
                         "type": "mac_app_direct",
-                        "bundleId": "desktop",
+                        "bundle_id": "desktop",
                         "certs": ["direct"]
                     }
                 }
@@ -938,9 +961,9 @@ mod tests {
     fn rejects_incompatible_bundle_id_platform() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
-                    "main": { "bundleId": "com.example.app", "name": "App", "platform": "ios" }
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "main": { "bundle_id": "com.example.app", "name": "App", "platform": "ios" }
                 },
                 "certs": {
                     "direct": { "type": "developer_id_application", "name": "Developer ID" }
@@ -949,7 +972,7 @@ mod tests {
                     "direct": {
                         "name": "Direct",
                         "type": "mac_app_direct",
-                        "bundleId": "main",
+                        "bundle_id": "main",
                         "certs": ["direct"]
                     }
                 }
@@ -964,9 +987,9 @@ mod tests {
     fn accepts_ipados_device_for_ios_profile() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
-                    "main": { "bundleId": "com.example.app", "name": "App", "platform": "ios" }
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "main": { "bundle_id": "com.example.app", "name": "App", "platform": "ios" }
                 },
                 "devices": {
                     "ipad": { "family": "ipados", "udid": "abc", "name": "My iPad" }
@@ -978,7 +1001,7 @@ mod tests {
                     "development": {
                         "name": "Development",
                         "type": "ios_app_development",
-                        "bundleId": "main",
+                        "bundle_id": "main",
                         "certs": ["dev"],
                         "devices": ["ipad"]
                     }
@@ -994,9 +1017,9 @@ mod tests {
     fn rejects_tvos_device_for_ios_profile() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
-                    "main": { "bundleId": "com.example.app", "name": "App", "platform": "ios" }
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "main": { "bundle_id": "com.example.app", "name": "App", "platform": "ios" }
                 },
                 "devices": {
                     "appletv": { "family": "tvos", "udid": "abc", "name": "Apple TV" }
@@ -1008,7 +1031,7 @@ mod tests {
                     "development": {
                         "name": "Development",
                         "type": "ios_app_development",
-                        "bundleId": "main",
+                        "bundle_id": "main",
                         "certs": ["dev"],
                         "devices": ["appletv"]
                     }
@@ -1024,9 +1047,9 @@ mod tests {
     fn accepts_tvos_development_profile() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
-                    "tv-app": { "bundleId": "com.example.tv", "name": "TV App", "platform": "ios" }
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "tv-app": { "bundle_id": "com.example.tv", "name": "TV App", "platform": "ios" }
                 },
                 "devices": {
                     "living-room": { "family": "tvos", "udid": "abc", "name": "Apple TV" }
@@ -1038,7 +1061,7 @@ mod tests {
                     "tv-development": {
                         "name": "TV Development",
                         "type": "tvos_app_development",
-                        "bundleId": "tv-app",
+                        "bundle_id": "tv-app",
                         "certs": ["dev"],
                         "devices": ["living-room"]
                     }
@@ -1054,9 +1077,9 @@ mod tests {
     fn accepts_ios_inhouse_profile() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
-                    "main": { "bundleId": "com.example.app", "name": "App", "platform": "ios" }
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "main": { "bundle_id": "com.example.app", "name": "App", "platform": "ios" }
                 },
                 "certs": {
                     "dist": { "type": "distribution", "name": "Dist" }
@@ -1065,7 +1088,7 @@ mod tests {
                     "inhouse": {
                         "name": "In House",
                         "type": "ios_app_inhouse",
-                        "bundleId": "main",
+                        "bundle_id": "main",
                         "certs": ["dist"]
                     }
                 }
@@ -1080,9 +1103,9 @@ mod tests {
     fn rejects_logical_keys_with_path_separators() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "teamId": "TEAM123",
-                "bundleIds": {
-                    "bad/name": { "bundleId": "com.example.app", "name": "App", "platform": "ios" }
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "bad/name": { "bundle_id": "com.example.app", "name": "App", "platform": "ios" }
                 }
             }"#,
         )

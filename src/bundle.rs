@@ -29,7 +29,7 @@ pub const BUNDLE_FILE_NAME: &str = "signing.ascbundle";
 pub const DEVELOPER_BUNDLE_PASSWORD_ENV: &str = "ASC_DEVELOPER_BUNDLE_PASSWORD";
 pub const RELEASE_BUNDLE_PASSWORD_ENV: &str = "ASC_RELEASE_BUNDLE_PASSWORD";
 
-const BUNDLE_VERSION: u32 = 6;
+const BUNDLE_VERSION: u32 = 1;
 const MANIFEST_PATH: &str = "manifest.json";
 const SCOPES_DIR: &str = "scopes";
 const PAYLOAD_FILE_NAME: &str = "payload.age";
@@ -1013,13 +1013,22 @@ fn profile_file_name(logical_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Scope, initialize_bundle, merge_signing_bundle, restore_scope, write_scope};
+    use super::{
+        MANIFEST_PATH, STATE_PATH, Scope, initialize_bundle, merge_signing_bundle, restore_scope,
+        write_scope,
+    };
     use crate::{
         state::{ManagedCertificate, State},
         sync::Workspace,
     };
     use age::secrecy::SecretString;
-    use std::collections::BTreeMap;
+    use serde_json::Value;
+    use std::{
+        collections::BTreeMap,
+        fs,
+        io::{Cursor, Read},
+    };
+    use tar::Archive;
     use tempfile::tempdir;
 
     fn passwords() -> BTreeMap<Scope, SecretString> {
@@ -1078,6 +1087,44 @@ mod tests {
 
         assert_eq!(restored.team_id, "TEAM123");
         assert_eq!(restored_runtime.cert_bytes("dev").unwrap(), b"fake-p12");
+    }
+
+    #[test]
+    fn bundle_archive_versions_are_reset_to_one() {
+        let tempdir = tempdir().unwrap();
+        let bundle_path = tempdir.path().join("signing.ascbundle");
+
+        initialize_bundle(&bundle_path, "TEAM123", &passwords()).unwrap();
+
+        let mut archive = Archive::new(Cursor::new(fs::read(&bundle_path).unwrap()));
+        let mut manifest_version = None;
+        let mut state_version = None;
+
+        for entry in archive.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            let path = entry.path().unwrap().to_path_buf();
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes).unwrap();
+
+            match path.to_str() {
+                Some(MANIFEST_PATH) => {
+                    manifest_version = serde_json::from_slice::<Value>(&bytes)
+                        .unwrap()
+                        .get("version")
+                        .and_then(Value::as_u64);
+                }
+                Some(STATE_PATH) => {
+                    state_version = serde_json::from_slice::<Value>(&bytes)
+                        .unwrap()
+                        .get("version")
+                        .and_then(Value::as_u64);
+                }
+                _ => {}
+            }
+        }
+
+        assert_eq!(manifest_version, Some(1));
+        assert_eq!(state_version, Some(1));
     }
 
     #[test]

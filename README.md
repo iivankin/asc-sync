@@ -35,7 +35,7 @@ If `asccli.sh` is already installed and configured, `auth import` first offers t
 `asc` profile from `~/.asc/config.json` / its keychain-backed storage instead of asking you to type
 the key details again.
 
-`asc-sync` stores the imported auth in `~/.asc-sync/auth/<teamId>.json`.
+`asc-sync` stores the imported auth in `~/.asc-sync/auth/<team_id>.json`.
 
 For CI or other non-interactive environments, you can skip `auth import` and set environment variables instead:
 
@@ -60,17 +60,17 @@ cargo run -- init
 ```
 
 `init` writes `asc.json` with a version-pinned published schema URL on `https://orbitstorage.dev/schemas/`.
-It does not ask for `teamId`; it selects from the imported auth entries already stored in `~/.asc-sync`.
+It does not ask for `team_id`; it selects from the imported auth entries already stored in `~/.asc-sync`.
 
 Pass the desired state with `--config asc.json`.
 
 ```json
 {
   "$schema": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.0.json",
-  "teamId": "TEAMID1234",
-  "bundleIds": {
+  "team_id": "TEAMID1234",
+  "bundle_ids": {
     "main": {
-      "bundleId": "com.acme.app",
+      "bundle_id": "com.acme.app",
       "name": "Acme App",
       "platform": "ios",
       "capabilities": [
@@ -88,13 +88,13 @@ Pass the desired state with `--config asc.json`.
         },
         {
           "apple_id_auth": {
-            "appConsent": "primary_app_consent"
+            "app_consent": "primary_app_consent"
           }
         }
       ]
     },
     "desktop": {
-      "bundleId": "com.acme.desktop",
+      "bundle_id": "com.acme.desktop",
       "name": "Acme Desktop",
       "platform": "mac_os"
     }
@@ -129,20 +129,20 @@ Pass the desired state with `--config asc.json`.
     "ios-development": {
       "name": "Acme iOS Development",
       "type": "ios_app_development",
-      "bundleId": "main",
+      "bundle_id": "main",
       "certs": ["dev"],
       "devices": ["ivan-iphone"]
     },
     "ios-app-store": {
       "name": "Acme iOS App Store",
       "type": "ios_app_store",
-      "bundleId": "main",
+      "bundle_id": "main",
       "certs": ["app-store"]
     },
     "mac-direct": {
       "name": "Acme Mac Direct",
       "type": "mac_app_direct",
-      "bundleId": "desktop",
+      "bundle_id": "desktop",
       "certs": ["direct"]
     }
   }
@@ -159,7 +159,7 @@ cargo run -- validate --config asc.json
 
 If `signing.ascbundle` exists, `validate` also:
 
-- verifies the bundle belongs to the same `teamId`
+- verifies the bundle belongs to the same `team_id`
 - when App Store Connect auth is available, verifies managed bundle IDs still exist in ASC
 - when App Store Connect auth is available, verifies managed devices still exist and remain `ENABLED` in ASC
 - checks managed certificates in the bundle are not expired
@@ -203,13 +203,13 @@ cargo run -- submit --config asc.json --file ./MyMacApp.pkg --bundle-id desktop
 ```
 
 `submit` uses `xcrun altool --upload-package`. It requires that an App Store Connect
-app record already exists for the chosen `bundleId`; create the app record first in
+app record already exists for the chosen `bundle_id`; create the app record first in
 App Store Connect before submitting.
 
-If `asc.json` contains more than one `bundleIds` entry, `submit` requires `--bundle-id <logical-id>`
+If `asc.json` contains more than one `bundle_ids` entry, `submit` requires `--bundle-id <logical-id>`
 to choose which app record to target.
 
-If you change `teamId` in `asc.json`, the next mutating config-based command that opens
+If you change `team_id` in `asc.json`, the next mutating config-based command that opens
 `signing.ascbundle` hard-resets it to an empty state for the new team. This is a destructive
 cutover, not a migration. Read-only commands fail instead of rewriting the bundle.
 
@@ -330,11 +330,11 @@ Recommended workflow:
 Password handling:
 
 - `developer` and `release` always use different passwords
-- App Store Connect auth is resolved by `teamId`
+- App Store Connect auth is resolved by `team_id`
 - device registration uses `https://asc.orbitstorage.dev` by default; `ASC_DEVICE_SERVER_URL` is only an override
 - on the first `apply`, `asc-sync` generates both passwords automatically, prints them once, and stores them in `~/.asc-sync/bundle-passwords/`
-- local machines resolve ASC auth from `~/.asc-sync/auth/<teamId>.json`
-- if no imported auth exists for that `teamId`, `asc-sync` falls back to `ASC_ISSUER_ID`, `ASC_KEY_ID`, and `ASC_PRIVATE_KEY` or `ASC_PRIVATE_KEY_PATH`
+- local machines resolve ASC auth from `~/.asc-sync/auth/<team_id>.json`
+- if no imported auth exists for that `team_id`, `asc-sync` falls back to `ASC_ISSUER_ID`, `ASC_KEY_ID`, and `ASC_PRIVATE_KEY` or `ASC_PRIVATE_KEY_PATH`
 - `device add` and `device add-local` both update `asc.json` before they touch ASC, so the next `apply` does not prune the device back out
 - later `plan`, `apply`, `signing import`, and `revoke` try passwords in this order:
   - `ASC_DEVELOPER_BUNDLE_PASSWORD` / `ASC_RELEASE_BUNDLE_PASSWORD`
@@ -361,7 +361,7 @@ Capabilities with settings use compact object forms:
 [
   { "icloud": { "version": "xcode_6" } },
   { "data_protection": { "level": "complete_protection" } },
-  { "apple_id_auth": { "appConsent": "primary_app_consent" } }
+  { "apple_id_auth": { "app_consent": "primary_app_consent" } }
 ]
 ```
 
@@ -382,7 +382,7 @@ Profile type values:
 - `mac_catalyst_app_store`
 - `mac_catalyst_app_direct`
 
-Logical keys for `bundleIds`, `devices`, `certs`, and `profiles` are stable IDs, not display names.
+Logical keys for `bundle_ids`, `devices`, `certs`, and `profiles` are stable IDs, not display names.
 They must use only ASCII letters, digits, `.`, `-`, and `_`.
 
 The JSON Schema is checked into [schema/asc-sync.schema.json](/Users/ilyai/Developer/personal/asc-sync/schema/asc-sync.schema.json).

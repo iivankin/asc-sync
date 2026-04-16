@@ -9,8 +9,8 @@ pub const PUBLISHED_SCHEMA_URL: &str = concat!(
 pub fn init_config_template(team_id: &str) -> Value {
     json!({
         "$schema": PUBLISHED_SCHEMA_URL,
-        "teamId": team_id,
-        "bundleIds": {},
+        "team_id": team_id,
+        "bundle_ids": {},
         "devices": {},
         "certs": {},
         "profiles": {},

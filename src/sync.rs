@@ -208,7 +208,7 @@ impl<'a> SyncEngine<'a> {
                 ensure!(
                     bundle.attributes.platform == spec.platform.asc_value()
                         || bundle.attributes.platform == "UNIVERSAL",
-                    "bundleId {logical_name} exists with incompatible platform {}",
+                    "bundle_id {logical_name} exists with incompatible platform {}",
                     bundle.attributes.platform
                 );
                 bundle_id_ids.insert(logical_name.clone(), bundle.id.clone());
@@ -224,7 +224,7 @@ impl<'a> SyncEngine<'a> {
             }
 
             return Err(anyhow::anyhow!(
-                "release scope requires existing bundleId {logical_name} ({})",
+                "release scope requires existing bundle_id {logical_name} ({})",
                 spec.bundle_id
             ));
         }
@@ -269,14 +269,14 @@ impl<'a> SyncEngine<'a> {
                 ensure!(
                     bundle.attributes.platform == spec.platform.asc_value()
                         || bundle.attributes.platform == "UNIVERSAL",
-                    "bundleId {logical_name} exists with incompatible platform {}",
+                    "bundle_id {logical_name} exists with incompatible platform {}",
                     bundle.attributes.platform
                 );
                 if bundle.attributes.name != spec.name {
                     self.record(
                         ChangeKind::Update,
-                        format!("bundleId.{logical_name}"),
-                        "ensure bundleId name matches config".into(),
+                        format!("bundle_id.{logical_name}"),
+                        "ensure bundle_id name matches config".into(),
                     );
                     if self.mode == Mode::Apply {
                         self.client.update_bundle_id_name(&bundle.id, &spec.name)?
@@ -291,7 +291,7 @@ impl<'a> SyncEngine<'a> {
             } else {
                 self.record(
                     ChangeKind::Create,
-                    format!("bundleId.{logical_name}"),
+                    format!("bundle_id.{logical_name}"),
                     spec.bundle_id.clone(),
                 );
                 if self.mode == Mode::Apply {
@@ -338,7 +338,7 @@ impl<'a> SyncEngine<'a> {
                 self.record(
                     ChangeKind::Create,
                     format!(
-                        "bundleId.{bundle_id_name}.capability.{}",
+                        "bundle_id.{bundle_id_name}.capability.{}",
                         desired.capability_type
                     ),
                     "enable capability".into(),
@@ -376,7 +376,7 @@ impl<'a> SyncEngine<'a> {
 
                 self.record(
                     ChangeKind::Replace,
-                    format!("bundleId.{bundle_id_name}.capability.{current_type}"),
+                    format!("bundle_id.{bundle_id_name}.capability.{current_type}"),
                     "configuration drift".into(),
                 );
                 if self.mode == Mode::Apply {
@@ -388,7 +388,7 @@ impl<'a> SyncEngine<'a> {
 
             self.record(
                 ChangeKind::Delete,
-                format!("bundleId.{bundle_id_name}.capability.{current_type}"),
+                format!("bundle_id.{bundle_id_name}.capability.{current_type}"),
                 "not present in config".into(),
             );
             if self.mode == Mode::Apply {
@@ -403,7 +403,7 @@ impl<'a> SyncEngine<'a> {
             }
             self.record(
                 ChangeKind::Create,
-                format!("bundleId.{bundle_id_name}.capability.{capability_type}"),
+                format!("bundle_id.{bundle_id_name}.capability.{capability_type}"),
                 "enable capability".into(),
             );
             if self.mode == Mode::Apply {
@@ -602,10 +602,10 @@ impl<'a> SyncEngine<'a> {
         certificate_ids: &BTreeMap<String, String>,
     ) -> Result<()> {
         for (logical_name, spec) in self.scoped_profile_specs() {
-            let desired_bundle_id_id = bundle_id_ids
-                .get(&spec.bundle_id)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("missing bundleId id for profile {logical_name}"))?;
+            let desired_bundle_id_id =
+                bundle_id_ids.get(&spec.bundle_id).cloned().ok_or_else(|| {
+                    anyhow::anyhow!("missing bundle_id id for profile {logical_name}")
+                })?;
             let desired_certificate_ids: Vec<String> = spec
                 .certs
                 .iter()
@@ -799,7 +799,7 @@ impl<'a> SyncEngine<'a> {
         for (name, bundle_id) in removed {
             self.record(
                 ChangeKind::Delete,
-                format!("bundleId.{name}"),
+                format!("bundle_id.{name}"),
                 "removed from config".into(),
             );
             if self.mode == Mode::Apply
@@ -886,7 +886,7 @@ impl<'a> SyncEngine<'a> {
             let logical_name = profile.bundle_id.clone();
             let spec = self.config.bundle_ids.get(&logical_name).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "release scope profile references unknown bundleId {}",
+                    "release scope profile references unknown bundle_id {}",
                     profile.bundle_id
                 )
             })?;
