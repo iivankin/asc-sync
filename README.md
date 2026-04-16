@@ -15,6 +15,10 @@ Current certificate support is intentionally limited to the modern unified types
 - `development`
 - `distribution`
 - `developer_id_application`
+- `developer_id_installer`
+
+`developer_id_installer` maps to App Store Connect's `MAC_INSTALLER_DISTRIBUTION` certificate
+type. It is for signing `.pkg` installers and is not referenced by provisioning profiles.
 
 ## Auth Import
 
@@ -317,7 +321,7 @@ Internally it contains:
   - development certificates
   - development / adhoc profiles
 - a `release` section for:
-  - distribution and Developer ID certificates
+  - distribution, Developer ID Application, and Developer ID Installer certificates
   - App Store / direct distribution profiles
 
 Recommended workflow:

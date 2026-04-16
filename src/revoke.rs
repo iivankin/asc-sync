@@ -150,7 +150,9 @@ fn scoped_certificates(
 fn managed_certificate_scope(kind: &str) -> Option<Scope> {
     match kind {
         "DEVELOPMENT" => Some(Scope::Developer),
-        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION" => Some(Scope::Release),
+        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION" | "MAC_INSTALLER_DISTRIBUTION" => {
+            Some(Scope::Release)
+        }
         _ => None,
     }
 }
@@ -214,6 +216,16 @@ mod tests {
                 p12_password: "secret-dist".into(),
             },
         );
+        state.certs.insert(
+            "installer".into(),
+            ManagedCertificate {
+                apple_id: "installer-cert".into(),
+                kind: "MAC_INSTALLER_DISTRIBUTION".into(),
+                name: "Installer".into(),
+                serial_number: "serial-installer".into(),
+                p12_password: "secret-installer".into(),
+            },
+        );
         state.profiles.insert(
             "ios-dev".into(),
             ManagedProfile {
@@ -246,8 +258,9 @@ mod tests {
 
         assert_eq!(developer_certs.len(), 1);
         assert_eq!(developer_certs[0].0, "dev");
-        assert_eq!(release_certs.len(), 1);
+        assert_eq!(release_certs.len(), 2);
         assert_eq!(release_certs[0].0, "dist");
+        assert_eq!(release_certs[1].0, "installer");
         assert_eq!(developer_profiles.len(), 1);
         assert_eq!(developer_profiles[0].0, "ios-dev");
         assert_eq!(release_profiles.len(), 1);

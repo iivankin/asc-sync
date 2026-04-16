@@ -408,15 +408,12 @@ fn slugify_device_id(name: &str) -> String {
 fn print_device_add_outcome(config_path: &Path, display_name: &str, udid: &str, apply: bool) {
     if apply {
         println!(
-            "Registered device {} ({}) in ASC, wrote it into {}, and updated developer state in signing.ascbundle.",
+            "Registered device {} ({}) in ASC, wrote it into {}, and updated developer state in the signing bundle.",
             display_name,
             udid,
             config_path.display()
         );
-        println!(
-            "Run `cargo run -- apply --config {}` to refresh development/ad-hoc profiles.",
-            config_path.display()
-        );
+        println!("Re-run your ASC apply workflow to refresh development/ad-hoc profiles.");
     } else {
         println!(
             "Wrote device {} ({}) into {}.",
@@ -425,8 +422,7 @@ fn print_device_add_outcome(config_path: &Path, display_name: &str, udid: &str, 
             config_path.display()
         );
         println!(
-            "Run `cargo run -- apply --config {}` when you want ASC registration and updated profiles.",
-            config_path.display()
+            "Run your ASC apply workflow when you want ASC registration and updated profiles."
         );
     }
 }

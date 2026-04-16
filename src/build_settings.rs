@@ -77,6 +77,7 @@ fn code_sign_identity_for_kind(kind: &str) -> Option<&'static str> {
         "DEVELOPMENT" => Some("Apple Development"),
         "DISTRIBUTION" => Some("Apple Distribution"),
         "DEVELOPER_ID_APPLICATION" => Some("Developer ID Application"),
+        "MAC_INSTALLER_DISTRIBUTION" => Some("Developer ID Installer"),
         _ => None,
     }
 }
@@ -122,6 +123,10 @@ mod tests {
         assert_eq!(
             code_sign_identity_for_kind("DEVELOPER_ID_APPLICATION"),
             Some("Developer ID Application")
+        );
+        assert_eq!(
+            code_sign_identity_for_kind("MAC_INSTALLER_DISTRIBUTION"),
+            Some("Developer ID Installer")
         );
         assert_eq!(code_sign_identity_for_kind("UNKNOWN"), None);
     }

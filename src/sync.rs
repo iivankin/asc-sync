@@ -953,7 +953,9 @@ fn random_password() -> String {
 fn managed_certificate_scope(kind: &str) -> Option<Scope> {
     match kind {
         "DEVELOPMENT" => Some(Scope::Developer),
-        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION" => Some(Scope::Release),
+        "DISTRIBUTION" | "DEVELOPER_ID_APPLICATION" | "MAC_INSTALLER_DISTRIBUTION" => {
+            Some(Scope::Release)
+        }
         _ => None,
     }
 }

@@ -60,7 +60,7 @@ fn reset_bundle_if_team_changed(
 
     if access == BundleAccess::ReadOnly {
         bail!(
-            "signing bundle belongs to team(s) {}; read-only commands will not reset it to {}. Run a mutating command such as `asc-sync apply --config ...` to perform the cutover",
+            "signing bundle belongs to team(s) {}; read-only commands will not reset it to {}. Run a mutating ASC apply workflow to perform the cutover",
             reset_from_team_ids.join(", "),
             team_id
         );

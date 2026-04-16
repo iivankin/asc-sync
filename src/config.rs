@@ -88,6 +88,7 @@ pub enum CertificateKind {
     Development,
     Distribution,
     DeveloperIdApplication,
+    DeveloperIdInstaller,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -413,13 +414,16 @@ impl CertificateKind {
             Self::Development => "DEVELOPMENT",
             Self::Distribution => "DISTRIBUTION",
             Self::DeveloperIdApplication => "DEVELOPER_ID_APPLICATION",
+            Self::DeveloperIdInstaller => "MAC_INSTALLER_DISTRIBUTION",
         }
     }
 
     pub fn scope(self) -> Scope {
         match self {
             Self::Development => Scope::Developer,
-            Self::Distribution | Self::DeveloperIdApplication => Scope::Release,
+            Self::Distribution | Self::DeveloperIdApplication | Self::DeveloperIdInstaller => {
+                Scope::Release
+            }
         }
     }
 }
@@ -604,6 +608,7 @@ impl fmt::Display for CertificateKind {
             Self::Development => write!(f, "development"),
             Self::Distribution => write!(f, "distribution"),
             Self::DeveloperIdApplication => write!(f, "developer_id_application"),
+            Self::DeveloperIdInstaller => write!(f, "developer_id_installer"),
         }
     }
 }
@@ -955,6 +960,47 @@ mod tests {
         .unwrap();
 
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn accepts_developer_id_installer_certificate() {
+        let config = serde_json::from_str::<Config>(
+            r#"{
+                "team_id": "TEAM123",
+                "certs": {
+                    "installer": { "type": "developer_id_installer", "name": "Installer" }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        config.validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_installer_certificate_for_direct_distribution_profile() {
+        let config = serde_json::from_str::<Config>(
+            r#"{
+                "team_id": "TEAM123",
+                "bundle_ids": {
+                    "desktop": { "bundle_id": "com.example.desktop", "name": "Desktop", "platform": "mac_os" }
+                },
+                "certs": {
+                    "installer": { "type": "developer_id_installer", "name": "Installer" }
+                },
+                "profiles": {
+                    "direct": {
+                        "name": "Direct",
+                        "type": "mac_app_direct",
+                        "bundle_id": "desktop",
+                        "certs": ["installer"]
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        assert!(config.validate().is_err());
     }
 
     #[test]

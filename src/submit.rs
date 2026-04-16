@@ -30,7 +30,7 @@ pub fn run(args: &SubmitArgs) -> Result<()> {
         .find_bundle_id_by_identifier(&bundle_spec.bundle_id)?
         .with_context(|| {
             format!(
-                "bundle_id {} ({}) does not exist in App Store Connect; run `asc-sync apply` first",
+                "bundle_id {} ({}) does not exist in App Store Connect; run your ASC apply workflow first",
                 logical_name, bundle_spec.bundle_id
             )
         })?;
