@@ -42,8 +42,11 @@ pub fn run(args: &SubmitArgs) -> Result<()> {
 
     let output = Command::new("xcrun")
         .arg("altool")
-        .arg("--upload-package")
+        .arg("--upload-app")
+        .arg("-f")
         .arg(&args.file)
+        .arg("--type")
+        .arg(upload_mode.platform)
         .arg("--api-key")
         .arg(&auth_record.key_id)
         .arg("--api-issuer")
@@ -54,7 +57,7 @@ pub fn run(args: &SubmitArgs) -> Result<()> {
         .arg("json")
         .arg("--wait")
         .output()
-        .context("failed to execute xcrun altool --upload-package")?;
+        .context("failed to execute xcrun altool --upload-app")?;
     ensure!(
         output.status.success(),
         "submit failed for {}: {}",
@@ -66,7 +69,7 @@ pub fn run(args: &SubmitArgs) -> Result<()> {
         "Submitted {} for bundle_id {} using {} upload flow.",
         args.file.display(),
         bundle_spec.bundle_id,
-        upload_mode
+        upload_mode.description
     );
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
     if !stdout.is_empty() {
@@ -98,12 +101,30 @@ fn resolve_bundle_spec<'a>(
     Ok((logical_name.as_str(), spec))
 }
 
-fn upload_mode(file: &Path) -> Result<&'static str> {
+struct UploadMode {
+    description: &'static str,
+    platform: &'static str,
+}
+
+fn upload_mode(file: &Path) -> Result<UploadMode> {
+    if file.is_dir() && file.extension().and_then(OsStr::to_str) == Some("app") {
+        return Ok(UploadMode {
+            description: "macOS App Store Connect app bundle",
+            platform: "macos",
+        });
+    }
+
     match file.extension().and_then(OsStr::to_str) {
-        Some("ipa") => Ok("iOS/App Store Connect"),
-        Some("pkg") => Ok("macOS/App Store Connect"),
+        Some("ipa") => Ok(UploadMode {
+            description: "iOS/App Store Connect",
+            platform: "ios",
+        }),
+        Some("app") => Ok(UploadMode {
+            description: "macOS App Store Connect app bundle",
+            platform: "macos",
+        }),
         _ => bail!(
-            "unsupported submit input {}; expected .ipa or .pkg",
+            "unsupported submit input {}; expected .ipa or .app",
             file.display()
         ),
     }
