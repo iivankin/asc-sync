@@ -61,6 +61,8 @@ curl -fsSL "$url" -o "$archive_path"
 mkdir -p "$install_dir"
 tar -xzf "$archive_path" -C "$tmp_dir"
 install -m 0755 "${tmp_dir}/asc-sync" "${install_dir}/asc-sync"
+ln -sf "asc-sync" "${install_dir}/ascs"
 
 echo "installed asc-sync to ${install_dir}/asc-sync"
+echo "installed ascs alias to ${install_dir}/ascs"
 echo "make sure ${install_dir} is in PATH"

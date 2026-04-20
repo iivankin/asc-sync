@@ -29,6 +29,7 @@ $url = "https://github.com/$repo/releases/latest/download/$asset"
 $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("asc-sync-install-" + [System.Guid]::NewGuid().ToString("N"))
 $archivePath = Join-Path $tmpDir $asset
 $binaryPath = Join-Path $installDir "asc-sync.exe"
+$aliasPath = Join-Path $installDir "ascs.cmd"
 
 function Add-InstallDirToUserPath {
     param(
@@ -70,13 +71,18 @@ try {
     New-Item -ItemType Directory -Path $installDir -Force | Out-Null
     Expand-Archive -Path $archivePath -DestinationPath $tmpDir -Force
     Copy-Item (Join-Path $tmpDir "asc-sync.exe") $binaryPath -Force
+    @"
+@echo off
+"%~dp0asc-sync.exe" %*
+"@ | Set-Content -Path $aliasPath -Encoding ASCII
 
     $pathUpdated = Add-InstallDirToUserPath -PathToAdd $installDir
 
     Write-Host "installed asc-sync to $binaryPath"
+    Write-Host "installed ascs alias to $aliasPath"
     if ($pathUpdated) {
         Write-Host "added $installDir to your user PATH"
-        Write-Host "open a new terminal window before running asc-sync"
+        Write-Host "open a new terminal window before running asc-sync or ascs"
     } else {
         Write-Host "$installDir is already in your user PATH"
     }
