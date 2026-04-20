@@ -62,19 +62,69 @@ export AWS_EC2_METADATA_DISABLED=true
 
 destination="s3://${CLOUDFLARE_R2_BUCKET}/${remote_prefix%/}"
 
-aws s3 sync \
-  "$source_dir" \
-  "$destination" \
-  --endpoint-url "$CLOUDFLARE_R2_ENDPOINT" \
-  --exclude "manifest.json" \
-  --cache-control "public, max-age=3600"
+if command -v aws >/dev/null 2>&1; then
+  aws s3 sync \
+    "$source_dir" \
+    "$destination" \
+    --endpoint-url "$CLOUDFLARE_R2_ENDPOINT" \
+    --exclude "manifest.json" \
+    --cache-control "public, max-age=3600"
 
-aws s3 cp \
-  "$manifest_path" \
-  "${destination}/manifest.json" \
-  --endpoint-url "$CLOUDFLARE_R2_ENDPOINT" \
-  --content-type application/json \
-  --cache-control "no-cache"
+  aws s3 cp \
+    "$manifest_path" \
+    "${destination}/manifest.json" \
+    --endpoint-url "$CLOUDFLARE_R2_ENDPOINT" \
+    --content-type application/json \
+    --cache-control "no-cache"
+elif command -v uv >/dev/null 2>&1; then
+  uv run --quiet --with boto3==1.40.73 python3 - "$source_dir" "$manifest_path" "$remote_prefix" <<'PY'
+import mimetypes
+import os
+import pathlib
+import sys
+
+import boto3
+
+source_dir = pathlib.Path(sys.argv[1])
+manifest_path = pathlib.Path(sys.argv[2])
+remote_prefix = sys.argv[3].strip("/")
+
+s3 = boto3.client("s3", endpoint_url=os.environ["CLOUDFLARE_R2_ENDPOINT"])
+bucket = os.environ["CLOUDFLARE_R2_BUCKET"]
+
+for path in sorted(source_dir.rglob("*")):
+    if not path.is_file():
+        continue
+    relative_path = path.relative_to(source_dir).as_posix()
+    if relative_path == "manifest.json":
+        continue
+    key = f"{remote_prefix}/{relative_path}"
+    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    print(f"upload: {relative_path}")
+    s3.upload_file(
+        str(path),
+        bucket,
+        key,
+        ExtraArgs={
+            "CacheControl": "public, max-age=3600",
+            "ContentType": content_type,
+        },
+    )
+
+s3.upload_file(
+    str(manifest_path),
+    bucket,
+    f"{remote_prefix}/manifest.json",
+    ExtraArgs={
+        "CacheControl": "no-cache",
+        "ContentType": "application/json",
+    },
+)
+PY
+else
+  echo "missing aws CLI; install awscli or uv to upload device frames" >&2
+  exit 1
+fi
 
 echo "uploaded device frames to ${public_url}"
 echo "uploaded hash manifest to ${public_url}/manifest.json"
