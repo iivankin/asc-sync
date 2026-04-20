@@ -75,6 +75,7 @@ Pass the desired state with `--config asc.json`.
 ```json
 {
   "$schema": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.0.json",
+  "_description": "This file is documented by its `$schema`. Start with `ascs --help` for the common workflow.",
   "team_id": "TEAMID1234",
   "bundle_ids": {
     "main": {

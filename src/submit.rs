@@ -20,9 +20,17 @@ use crate::{
 
 pub fn run(args: &SubmitArgs) -> Result<()> {
     let config = config_io::load_config(&args.config)?;
+    run_with_config(&config, &args.file, args.bundle_id.as_deref())
+}
+
+pub fn run_with_config(
+    config: &Config,
+    file: &Path,
+    explicit_bundle_id: Option<&str>,
+) -> Result<()> {
     config.validate()?;
 
-    let (logical_name, bundle_spec) = resolve_bundle_spec(&config, args.bundle_id.as_deref())?;
+    let (logical_name, bundle_spec) = resolve_bundle_spec(config, explicit_bundle_id)?;
     let auth_record = auth_store::resolve_auth_record(&config.team_id)?;
     let client = AscClient::new(auth_record.clone().into_context()?)?;
 
@@ -38,13 +46,13 @@ pub fn run(args: &SubmitArgs) -> Result<()> {
 
     let tempdir = tempfile::tempdir().context("failed to create temporary submit workspace")?;
     let key_path = write_private_key(&tempdir, &auth_record)?;
-    let upload_mode = upload_mode(&args.file)?;
+    let upload_mode = upload_mode(file)?;
 
     let output = Command::new("xcrun")
         .arg("altool")
         .arg("--upload-app")
         .arg("-f")
-        .arg(&args.file)
+        .arg(file)
         .arg("--type")
         .arg(upload_mode.platform)
         .arg("--api-key")
@@ -61,13 +69,13 @@ pub fn run(args: &SubmitArgs) -> Result<()> {
     ensure!(
         output.status.success(),
         "submit failed for {}: {}",
-        args.file.display(),
+        file.display(),
         command_failure(&output.stderr, &output.stdout)
     );
 
     println!(
         "Submitted {} for bundle_id {} using {} upload flow.",
-        args.file.display(),
+        file.display(),
         bundle_spec.bundle_id,
         upload_mode.description
     );

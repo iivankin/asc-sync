@@ -10,18 +10,26 @@ use crate::{
 };
 
 pub fn run(args: &RevokeArgs, config: &Config) -> Result<()> {
+    let workspace = Workspace::from_config_path(&args.config);
+    run_with_workspace(args.target, &workspace, config)
+}
+
+pub fn run_with_workspace(
+    target: RevokeTarget,
+    workspace: &Workspace,
+    config: &Config,
+) -> Result<()> {
     let auth = auth_store::resolve_auth_context(&config.team_id)?;
     let client = AscClient::new(auth)?;
-    let workspace = Workspace::from_config_path(&args.config);
     ensure!(
         workspace.bundle_path.exists(),
         "signing bundle {} does not exist",
         workspace.bundle_path.display()
     );
 
-    let scopes = target_scopes(args.target);
+    let scopes = target_scopes(target);
     let prepared_bundle = bundle_team::prepare_bundle_for_team(
-        &workspace,
+        workspace,
         &config.team_id,
         bundle_team::BundleAccess::Mutating,
     )?;

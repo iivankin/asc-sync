@@ -9,19 +9,23 @@ use anyhow::{Context, Result, bail, ensure};
 use tempfile::TempDir;
 
 use crate::{
-    auth::StoredAuthRecord, auth_store, cli::NotarizeArgs, config_io,
+    auth::StoredAuthRecord, auth_store, cli::NotarizeArgs, config::Config, config_io,
     state::set_private_permissions,
 };
 
 pub fn run(args: &NotarizeArgs) -> Result<()> {
     let config = config_io::load_config(&args.config)?;
+    run_with_config(&config, &args.file)
+}
+
+pub fn run_with_config(config: &Config, file: &Path) -> Result<()> {
     config.validate()?;
 
     let auth = auth_store::resolve_auth_record(&config.team_id)?;
     let tempdir =
         tempfile::tempdir().context("failed to create temporary notarization workspace")?;
     let key_path = write_private_key(&tempdir, &auth)?;
-    let prepared = prepare_submission(&args.file, &tempdir)?;
+    let prepared = prepare_submission(file, &tempdir)?;
 
     let output = Command::new("xcrun")
         .arg("notarytool")

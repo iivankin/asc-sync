@@ -14,6 +14,8 @@ use crate::scope::Scope;
 pub struct Config {
     #[serde(default, rename = "$schema")]
     pub schema: Option<String>,
+    #[serde(default, rename = "_description")]
+    pub description: Option<String>,
     pub team_id: String,
     #[serde(default)]
     pub bundle_ids: BTreeMap<String, BundleIdSpec>,
@@ -851,6 +853,23 @@ mod tests {
         assert_eq!(
             config.schema.as_deref(),
             Some("https://orbitstorage.dev/schemas/asc-sync.schema-0.1.0.json")
+        );
+    }
+
+    #[test]
+    fn accepts_description_field() {
+        let config = serde_json::from_str::<Config>(
+            r#"{
+                "_description": "This file is documented by its `$schema`.",
+                "team_id": "TEAM123"
+            }"#,
+        )
+        .unwrap();
+
+        config.validate().unwrap();
+        assert_eq!(
+            config.description.as_deref(),
+            Some("This file is documented by its `$schema`.")
         );
     }
 

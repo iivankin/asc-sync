@@ -29,34 +29,121 @@ use crate::{
 const DEVICE_SERVER_URL_ENV: &str = "ASC_DEVICE_SERVER_URL";
 const DEFAULT_DEVICE_SERVER_URL: &str = "https://asc.orbitstorage.dev";
 
+#[derive(Debug, Clone)]
+pub struct DeviceAddRequest {
+    pub name: String,
+    pub logical_id: Option<String>,
+    pub family: Option<DeviceFamily>,
+    pub apply: bool,
+    pub timeout_seconds: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeviceAddLocalRequest {
+    pub name: Option<String>,
+    pub logical_id: Option<String>,
+    pub current_mac: bool,
+    pub family: Option<DeviceFamily>,
+    pub udid: Option<String>,
+    pub apply: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegisteredDevice {
+    pub logical_id: String,
+    pub display_name: String,
+    pub family: DeviceFamily,
+    pub udid: String,
+}
+
 pub fn run_add(args: &DeviceAddArgs) -> Result<()> {
     let config = load_validated_config(&args.config)?;
-    let server_url = resolve_device_server_url(&config)?;
-    let logical_id = args
-        .id
+    let workspace = Workspace::from_config_path(&args.config);
+    let device = add_with_config(
+        &config,
+        Some(&workspace),
+        &DeviceAddRequest {
+            name: args.name.clone(),
+            logical_id: args.id.clone(),
+            family: args.family.map(DeviceFamily::from),
+            apply: args.apply,
+            timeout_seconds: args.timeout_seconds,
+        },
+    )?;
+    config_edit::upsert_device(
+        &args.config,
+        &device.logical_id,
+        &device.display_name,
+        device.family,
+        &device.udid,
+    )?;
+    print_device_add_outcome(&args.config, &device.display_name, &device.udid, args.apply);
+    Ok(())
+}
+
+pub fn run_add_local(args: &DeviceAddLocalArgs) -> Result<()> {
+    let config = load_validated_config(&args.config)?;
+    let workspace = Workspace::from_config_path(&args.config);
+    let device = add_local_with_config(
+        &config,
+        Some(&workspace),
+        &DeviceAddLocalRequest {
+            name: args.name.clone(),
+            logical_id: args.id.clone(),
+            current_mac: args.current_mac,
+            family: args.family.map(DeviceFamily::from),
+            udid: args.udid.clone(),
+            apply: args.apply,
+        },
+    )?;
+    config_edit::upsert_device(
+        &args.config,
+        &device.logical_id,
+        &device.display_name,
+        device.family,
+        &device.udid,
+    )?;
+    print_device_add_outcome(&args.config, &device.display_name, &device.udid, args.apply);
+    Ok(())
+}
+
+struct LocalDeviceSpec {
+    logical_id: String,
+    display_name: String,
+    family: DeviceFamily,
+    udid: String,
+}
+
+pub fn add_with_config(
+    config: &Config,
+    workspace: Option<&Workspace>,
+    request: &DeviceAddRequest,
+) -> Result<RegisteredDevice> {
+    let server_url = resolve_device_server_url(config)?;
+    let logical_id = request
+        .logical_id
         .clone()
-        .unwrap_or_else(|| slugify_device_id(&args.name));
+        .unwrap_or_else(|| slugify_device_id(&request.name));
 
     let client = device_server_http_client()?;
-    let request = CreateRegistrationRequest {
+    let request_payload = CreateRegistrationRequest {
         logical_id: Some(logical_id.clone()),
-        display_name: Some(args.name.clone()),
+        display_name: Some(request.name.clone()),
     };
-    let response = create_registration(&client, &server_url, &request)?;
+    let response = create_registration(&client, &server_url, &request_payload)?;
 
     print_registration_instructions(&response.registration_url);
     let registration = poll_registration(
         &client,
         &server_url,
         &response.token,
-        Duration::from_secs(args.timeout_seconds),
+        Duration::from_secs(request.timeout_seconds),
     )?;
     let result = registration
         .result
         .ok_or_else(|| anyhow::anyhow!("registration completed without device data"))?;
-    let family = args
+    let family = request
         .family
-        .map(DeviceFamily::from)
         .or_else(|| {
             result
                 .product
@@ -70,71 +157,57 @@ pub fn run_add(args: &DeviceAddArgs) -> Result<()> {
         })?;
 
     register_device_from_result(
-        &args.config,
-        &config,
+        workspace,
+        config,
         &logical_id,
-        &args.name,
+        &request.name,
         family,
         &result,
-        args.apply,
-    )?;
-    print_device_add_outcome(&args.config, &args.name, &result.udid, args.apply);
-    Ok(())
+        request.apply,
+    )
 }
 
-pub fn run_add_local(args: &DeviceAddLocalArgs) -> Result<()> {
-    let config = load_validated_config(&args.config)?;
-    let spec = resolve_local_device_spec(args)?;
-    let udid = spec.udid.clone();
+pub fn add_local_with_config(
+    config: &Config,
+    workspace: Option<&Workspace>,
+    request: &DeviceAddLocalRequest,
+) -> Result<RegisteredDevice> {
+    let spec = resolve_local_device_spec(request)?;
     register_device_from_result(
-        &args.config,
-        &config,
+        workspace,
+        config,
         &spec.logical_id,
         &spec.display_name,
         spec.family,
         &CompletedRegistration {
-            udid,
+            udid: spec.udid.clone(),
             product: None,
             version: None,
         },
-        args.apply,
-    )?;
-    print_device_add_outcome(&args.config, &spec.display_name, &spec.udid, args.apply);
-    Ok(())
-}
-
-struct LocalDeviceSpec {
-    logical_id: String,
-    display_name: String,
-    family: DeviceFamily,
-    udid: String,
+        request.apply,
+    )
 }
 
 fn register_device_from_result(
-    config_path: &Path,
+    workspace: Option<&Workspace>,
     config: &Config,
     logical_id: &str,
     display_name: &str,
     family: DeviceFamily,
     registration: &CompletedRegistration,
     apply: bool,
-) -> Result<()> {
+) -> Result<RegisteredDevice> {
     let developer_bundle = if apply {
         Some(prepare_developer_bundle_for_apply(
-            config_path,
+            workspace.ok_or_else(|| {
+                anyhow::anyhow!("workspace is required for `device add --apply` operations")
+            })?,
             &config.team_id,
         )?)
     } else {
         None
     };
 
-    config_edit::upsert_device(
-        config_path,
-        logical_id,
-        display_name,
-        family,
-        &registration.udid,
-    )?;
     if apply {
         let device = ensure_device_registered(config, display_name, &registration.udid, family)?;
         let developer_bundle =
@@ -145,10 +218,15 @@ fn register_device_from_result(
             logical_id,
             &registration.udid,
             &device,
-        )
-    } else {
-        Ok(())
+        )?;
     }
+
+    Ok(RegisteredDevice {
+        logical_id: logical_id.to_owned(),
+        display_name: display_name.to_owned(),
+        family,
+        udid: registration.udid.clone(),
+    })
 }
 
 fn ensure_device_registered(
@@ -181,7 +259,7 @@ fn ensure_device_registered(
     client.create_device(display_name, udid, family)
 }
 
-fn resolve_local_device_spec(args: &DeviceAddLocalArgs) -> Result<LocalDeviceSpec> {
+fn resolve_local_device_spec(args: &DeviceAddLocalRequest) -> Result<LocalDeviceSpec> {
     if args.current_mac {
         ensure!(
             args.family.is_none() && args.udid.is_none(),
@@ -190,7 +268,7 @@ fn resolve_local_device_spec(args: &DeviceAddLocalArgs) -> Result<LocalDeviceSpe
         let detected = detect_current_mac()?;
         let display_name = args.name.clone().unwrap_or(detected.name);
         let logical_id = args
-            .id
+            .logical_id
             .clone()
             .unwrap_or_else(|| slugify_device_id(&display_name));
         return Ok(LocalDeviceSpec {
@@ -208,16 +286,13 @@ fn resolve_local_device_spec(args: &DeviceAddLocalArgs) -> Result<LocalDeviceSpe
         {
             let display_name = args.name.clone().unwrap_or(detected.name);
             let logical_id = args
-                .id
+                .logical_id
                 .clone()
                 .unwrap_or_else(|| slugify_device_id(&display_name));
             return Ok(LocalDeviceSpec {
                 logical_id,
                 display_name,
-                family: args
-                    .family
-                    .map(DeviceFamily::from)
-                    .unwrap_or(detected.family),
+                family: args.family.unwrap_or(detected.family),
                 udid: udid.clone(),
             });
         }
@@ -229,14 +304,14 @@ fn resolve_local_device_spec(args: &DeviceAddLocalArgs) -> Result<LocalDeviceSpe
             anyhow::anyhow!("--name is required when --udid is not discoverable locally")
         })?;
         let logical_id = args
-            .id
+            .logical_id
             .clone()
             .unwrap_or_else(|| slugify_device_id(&display_name));
 
         return Ok(LocalDeviceSpec {
             logical_id,
             display_name,
-            family: family.into(),
+            family,
             udid: udid.clone(),
         });
     }
@@ -261,7 +336,7 @@ fn resolve_local_device_spec(args: &DeviceAddLocalArgs) -> Result<LocalDeviceSpe
 
     let display_name = args.name.clone().unwrap_or(detected.name);
     let logical_id = args
-        .id
+        .logical_id
         .clone()
         .unwrap_or_else(|| slugify_device_id(&display_name));
 
@@ -446,17 +521,16 @@ struct PreparedDeveloperBundle {
 }
 
 fn prepare_developer_bundle_for_apply(
-    config_path: &Path,
+    workspace: &Workspace,
     team_id: &str,
 ) -> Result<PreparedDeveloperBundle> {
-    let workspace = Workspace::from_config_path(config_path);
     if workspace.bundle_path.exists() {
         let prepared_bundle = bundle_team::prepare_bundle_for_team(
-            &workspace,
+            workspace,
             team_id,
             bundle_team::BundleAccess::Mutating,
         )?;
-        print_bundle_reset_notice(&workspace, team_id, &prepared_bundle.reset_from_team_ids);
+        print_bundle_reset_notice(workspace, team_id, &prepared_bundle.reset_from_team_ids);
         let password =
             prepared_bundle
                 .passwords
@@ -468,19 +542,19 @@ fn prepare_developer_bundle_for_apply(
                     )
                 })?;
         return Ok(PreparedDeveloperBundle {
-            workspace,
+            workspace: workspace.clone(),
             password,
         });
     }
 
     let passwords = bundle::bootstrap_bundle(&workspace.bundle_path, team_id)?;
-    print_bootstrap_passwords(&workspace, &passwords);
+    print_bootstrap_passwords(workspace, &passwords);
     let password = passwords
         .get(&Scope::Developer)
         .cloned()
         .expect("bootstrap passwords contain developer scope");
     Ok(PreparedDeveloperBundle {
-        workspace,
+        workspace: workspace.clone(),
         password,
     })
 }

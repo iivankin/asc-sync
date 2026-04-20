@@ -60,6 +60,10 @@ struct AscCliKeychainPayload {
 }
 
 pub fn import_auth_interactively() -> Result<()> {
+    import_auth_interactively_with_team_id().map(|_| ())
+}
+
+pub fn import_auth_interactively_with_team_id() -> Result<String> {
     ensure!(
         io::stdin().is_terminal() && io::stderr().is_terminal(),
         "auth import requires an interactive terminal"
@@ -76,7 +80,7 @@ pub fn import_auth_interactively() -> Result<()> {
     store_auth_record(&team_id, &record)?;
 
     println!("Stored App Store Connect auth for team {team_id} in ~/.asc-sync.");
-    Ok(())
+    Ok(team_id)
 }
 
 pub fn resolve_auth_context(team_id: &str) -> Result<AuthContext> {

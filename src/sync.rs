@@ -84,13 +84,18 @@ struct ProfileMatchSpec<'a> {
 }
 
 impl Workspace {
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        let root = root.into();
+        let bundle_path = root.join(crate::bundle::BUNDLE_FILE_NAME);
+        Self { root, bundle_path }
+    }
+
     pub fn from_config_path(config_path: &Path) -> Self {
         let root = config_path
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .to_path_buf();
-        let bundle_path = root.join(crate::bundle::BUNDLE_FILE_NAME);
-        Self { root, bundle_path }
+        Self::new(root)
     }
 
     pub fn create_runtime(&self) -> Result<RuntimeWorkspace> {
