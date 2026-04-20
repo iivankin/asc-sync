@@ -87,6 +87,26 @@ pub fn resolve_auth_context(team_id: &str) -> Result<AuthContext> {
     resolve_auth_record(team_id)?.into_context()
 }
 
+pub fn resolve_auth_context_for_optional_team_id(team_id: Option<&str>) -> Result<AuthContext> {
+    if let Some(team_id) = team_id.map(str::trim).filter(|team_id| !team_id.is_empty()) {
+        return resolve_auth_context(team_id);
+    }
+
+    let team_ids = stored_team_ids()?;
+    match team_ids.len() {
+        0 => {
+            if let Some(record) = load_env_auth_record()? {
+                return record.into_context();
+            }
+            bail!(
+                "no App Store Connect auth configured; import auth first, pass --team-id/--config, or set {ISSUER_ID_ENV}, {KEY_ID_ENV}, and one of {PRIVATE_KEY_ENV}/{PRIVATE_KEY_PATH_ENV}"
+            );
+        }
+        1 => resolve_auth_context(&team_ids[0]),
+        _ => bail!("multiple App Store Connect auth teams found; pass --team-id or --config"),
+    }
+}
+
 pub fn resolve_auth_context_if_available(team_id: &str) -> Result<Option<AuthContext>> {
     if let Some(record) = load_auth_record(team_id)? {
         return record.into_context().map(Some);

@@ -3,3 +3,4 @@
 .env
 AuthKey.p8
 .DS_Store
+/assets/

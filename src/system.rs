@@ -454,7 +454,7 @@ fn load_generic_password(service: &str, account: &str) -> Result<Option<String>>
     ))
 }
 
-fn global_asc_sync_dir() -> Result<PathBuf> {
+pub(crate) fn global_asc_sync_dir() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME is not set")?;
     Ok(PathBuf::from(home).join(ASC_SYNC_DIR_NAME))
 }

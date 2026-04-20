@@ -18,6 +18,7 @@ pub fn init_config_template(team_id: &str) -> Value {
         "devices": {},
         "certs": {},
         "profiles": {},
+        "apps": {},
     })
 }
 

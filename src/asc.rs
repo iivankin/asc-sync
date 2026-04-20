@@ -18,7 +18,17 @@ use crate::{
 const ASC_BASE_URL: &str = "https://api.appstoreconnect.apple.com/v1";
 
 fn asc_base_url() -> String {
-    std::env::var("ORBIT_ASC_BASE_URL").unwrap_or_else(|_| ASC_BASE_URL.to_owned())
+    std::env::var("ORBI_ASC_BASE_URL").unwrap_or_else(|_| ASC_BASE_URL.to_owned())
+}
+
+pub(crate) fn asc_endpoint(path: &str) -> String {
+    let base = asc_base_url();
+    if (path.starts_with("/v2/") || path.starts_with("/v3/"))
+        && let Some(root) = base.strip_suffix("/v1")
+    {
+        return format!("{root}{path}");
+    }
+    format!("{base}{path}")
 }
 
 #[derive(Debug)]
@@ -145,8 +155,20 @@ pub struct App {
 pub struct AppAttributes {
     pub name: String,
     pub sku: String,
+    #[serde(rename = "bundleId")]
+    pub bundle_id: String,
     #[serde(rename = "primaryLocale")]
     pub primary_locale: String,
+    #[serde(rename = "accessibilityUrl", default)]
+    pub accessibility_url: Option<String>,
+    #[serde(rename = "contentRightsDeclaration", default)]
+    pub content_rights_declaration: Option<String>,
+    #[serde(rename = "subscriptionStatusUrl", default)]
+    pub subscription_status_url: Option<String>,
+    #[serde(rename = "subscriptionStatusUrlForSandbox", default)]
+    pub subscription_status_url_for_sandbox: Option<String>,
+    #[serde(rename = "streamlinedPurchasingEnabled", default)]
+    pub streamlined_purchasing_enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -335,7 +357,7 @@ impl AscClient {
                 ("filter[bundleId]".into(), bundle_id_identifier.into()),
                 (
                     "fields[apps]".into(),
-                    "name,sku,primaryLocale,bundleId".into(),
+                    "name,sku,primaryLocale,bundleId,accessibilityUrl,contentRightsDeclaration,subscriptionStatusUrl,subscriptionStatusUrlForSandbox,streamlinedPurchasingEnabled".into(),
                 ),
             ],
         )?;
@@ -954,7 +976,11 @@ impl AscClient {
             .collect()
     }
 
-    fn get_paginated<T>(&self, url: String, query: Vec<(String, String)>) -> Result<Vec<T>>
+    pub(crate) fn get_paginated<T>(
+        &self,
+        url: String,
+        query: Vec<(String, String)>,
+    ) -> Result<Vec<T>>
     where
         T: DeserializeOwned,
     {
@@ -976,7 +1002,7 @@ impl AscClient {
         Ok(items)
     }
 
-    fn request_json<T, B>(
+    pub(crate) fn request_json<T, B>(
         &self,
         method: Method,
         url: String,
@@ -1012,7 +1038,7 @@ impl AscClient {
         unreachable!("request_json decode loop must return or error")
     }
 
-    fn request_empty<B>(
+    pub(crate) fn request_empty<B>(
         &self,
         method: Method,
         url: String,
@@ -1023,6 +1049,35 @@ impl AscClient {
         B: Serialize + ?Sized,
     {
         self.send(method, &url, query, body).map(|_| ())
+    }
+
+    pub(crate) fn upload_asset_part(
+        &self,
+        method: &str,
+        url: &str,
+        headers: &[(String, String)],
+        body: Vec<u8>,
+    ) -> Result<()> {
+        let method = Method::from_bytes(method.as_bytes())
+            .with_context(|| format!("invalid upload method {method}"))?;
+        let mut request = self.http.request(method.clone(), url);
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+
+        let response = request
+            .body(body)
+            .send()
+            .with_context(|| format!("asset upload request failed: {method} {url}"))?;
+        if response.status().is_success() {
+            return Ok(());
+        }
+
+        let status = response.status();
+        let body = response.text().with_context(|| {
+            format!("failed to read asset upload error response: {method} {url}")
+        })?;
+        bail!("asset upload {method} {url} returned {status}: {body}");
     }
 
     fn send<B>(

@@ -57,6 +57,16 @@
       "additionalProperties": {
         "$ref": "#/$defs/profile"
       }
+    },
+    "apps": {
+      "type": "object",
+      "default": {},
+      "propertyNames": {
+        "$ref": "#/$defs/nonEmptyKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/app"
+      }
     }
   },
   "$defs": {
@@ -64,6 +74,11 @@
       "type": "string",
       "minLength": 1,
       "pattern": "^(?!(?:\\.|\\.\\.)$)[A-Za-z0-9._-]+$"
+    },
+    "localeKey": {
+      "type": "string",
+      "minLength": 1,
+      "description": "App Store Connect locale key, for example en-US, fr-FR, or ja."
     },
     "bundle_id": {
       "type": "object",
@@ -179,6 +194,1148 @@
           }
         }
       }
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundle_id_ref", "platforms"],
+      "properties": {
+        "bundle_id_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared": {
+          "$ref": "#/$defs/app_shared"
+        },
+        "store_info": {
+          "$ref": "#/$defs/app_store_info"
+        },
+        "availability": {
+          "$ref": "#/$defs/app_availability"
+        },
+        "pricing": {
+          "$ref": "#/$defs/commerce_pricing"
+        },
+        "custom_product_pages": {
+          "type": "object",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/nonEmptyKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/custom_product_page"
+          }
+        },
+        "in_app_purchases": {
+          "type": "object",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/nonEmptyKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/in_app_purchase"
+          }
+        },
+        "subscription_groups": {
+          "type": "object",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/nonEmptyKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/subscription_group"
+          }
+        },
+        "app_events": {
+          "type": "object",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/nonEmptyKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/app_event"
+          }
+        },
+        "privacy": {
+          "$ref": "#/$defs/app_privacy"
+        },
+        "platforms": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "enum": ["ios", "mac_os", "tvos", "vision_os"]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/app_platform"
+          }
+        }
+      }
+    },
+    "app_shared": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "primary_locale": {
+          "$ref": "#/$defs/string_source"
+        },
+        "accessibility_url": {
+          "$ref": "#/$defs/string_source"
+        },
+        "content_rights_declaration": {
+          "type": "string",
+          "enum": ["does_not_use_third_party_content", "uses_third_party_content"]
+        },
+        "subscription_status_url": {
+          "$ref": "#/$defs/string_source"
+        },
+        "subscription_status_url_for_sandbox": {
+          "$ref": "#/$defs/string_source"
+        },
+        "streamlined_purchasing_enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "app_store_info": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "categories": {
+          "$ref": "#/$defs/app_categories"
+        },
+        "localizations": {
+          "type": "object",
+          "description": "App-level AppInfo localizations. These are not version localizations; they contain app name, subtitle, and privacy policy fields.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/app_info_localization_source"
+          }
+        },
+        "age_rating": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "app_categories": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "primary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "primary_subcategory_one": {
+          "type": "string",
+          "minLength": 1
+        },
+        "primary_subcategory_two": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secondary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secondary_subcategory_one": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secondary_subcategory_two": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "app_availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "territories": {
+          "$ref": "#/$defs/territory_selection"
+        },
+        "available_in_new_territories": {
+          "type": "boolean"
+        },
+        "pre_order": {
+          "$ref": "#/$defs/app_pre_order"
+        }
+      }
+    },
+    "territory_selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["all", "only", "include"]
+        },
+        "values": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/territory_id"
+          }
+        },
+        "allow_removals": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "territory_id": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "app_pre_order": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "release_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publish_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "territories": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/territory_id"
+          }
+        }
+      }
+    },
+    "commerce_pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_territory"],
+      "properties": {
+        "base_territory": {
+          "$ref": "#/$defs/territory_id"
+        },
+        "schedule": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/price_schedule_entry"
+          }
+        },
+        "replace_future_schedule": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "price_schedule_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "end_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "price": {
+          "$ref": "#/$defs/string_source"
+        },
+        "price_point_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "territory_prices": {
+          "type": "object",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/territory_id"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/price_point"
+          }
+        }
+      }
+    },
+    "price_point": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "price": {
+          "$ref": "#/$defs/string_source"
+        },
+        "price_point_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "custom_product_page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "asc_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "deep_link": {
+          "$ref": "#/$defs/string_source"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "localizations": {
+          "type": "object",
+          "description": "Custom product page localizations keyed by App Store Connect locale. Extra JSON keys in each localization can be used by media render templates for the same locale.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/custom_product_page_localization_source"
+          }
+        },
+        "media": {
+          "type": "object",
+          "description": "Custom product page media keyed by App Store Connect locale. Each media locale must also exist in custom_product_pages.*.localizations so rendered screenshots can inherit that locale's strings.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/app_media_locale"
+          }
+        }
+      }
+    },
+    "custom_product_page_localization_source": {
+      "description": "Custom product page localization, either inline or a path to a JSON5 file.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to a JSON5 localization file."
+        },
+        {
+          "description": "Inline custom product page localization.",
+          "$ref": "#/$defs/custom_product_page_localization"
+        }
+      ]
+    },
+    "custom_product_page_localization": {
+      "type": "object",
+      "description": "Custom product page localization. Extra properties are available to screenshot render templates as placeholders, for example {{headline}} or {{hero.title}}.",
+      "additionalProperties": {
+        "description": "Additional JSON value exposed to screenshot render templates for this custom product page locale."
+      },
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "promotional_text": {
+          "$ref": "#/$defs/string_source"
+        },
+        "search_keyword_ids": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "in_app_purchase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id", "type", "reference_name"],
+      "properties": {
+        "asc_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "product_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": ["consumable", "non_consumable", "non_renewing_subscription"]
+        },
+        "reference_name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "family_sharable": {
+          "type": "boolean"
+        },
+        "review_note": {
+          "$ref": "#/$defs/string_source"
+        },
+        "localizations": {
+          "type": "object",
+          "description": "In-app purchase localizations keyed by App Store Connect locale.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/commerce_localization_source"
+          }
+        },
+        "pricing": {
+          "$ref": "#/$defs/commerce_pricing"
+        },
+        "availability": {
+          "$ref": "#/$defs/commerce_availability"
+        },
+        "review": {
+          "$ref": "#/$defs/commerce_review_asset"
+        }
+      }
+    },
+    "commerce_availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["territories"],
+      "properties": {
+        "territories": {
+          "$ref": "#/$defs/territory_selection"
+        },
+        "available_in_new_territories": {
+          "type": "boolean"
+        }
+      }
+    },
+    "commerce_localization_source": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "$ref": "#/$defs/commerce_localization"
+        }
+      ]
+    },
+    "commerce_localization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "description": {
+          "$ref": "#/$defs/string_source"
+        }
+      }
+    },
+    "commerce_review_asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "screenshot": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "subscription_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference_name"],
+      "properties": {
+        "asc_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "localizations": {
+          "type": "object",
+          "description": "Subscription group localizations keyed by App Store Connect locale.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/subscription_group_localization_source"
+          }
+        },
+        "subscriptions": {
+          "type": "object",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/nonEmptyKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/subscription"
+          }
+        }
+      }
+    },
+    "subscription_group_localization_source": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "$ref": "#/$defs/subscription_group_localization"
+        }
+      ]
+    },
+    "subscription_group_localization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "custom_app_name": {
+          "$ref": "#/$defs/string_source"
+        }
+      }
+    },
+    "subscription": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id", "reference_name"],
+      "properties": {
+        "asc_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "product_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "family_sharable": {
+          "type": "boolean"
+        },
+        "period": {
+          "type": "string",
+          "enum": ["one_week", "one_month", "two_months", "three_months", "six_months", "one_year"]
+        },
+        "group_level": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "review_note": {
+          "$ref": "#/$defs/string_source"
+        },
+        "localizations": {
+          "type": "object",
+          "description": "Subscription localizations keyed by App Store Connect locale.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/commerce_localization_source"
+          }
+        },
+        "pricing": {
+          "$ref": "#/$defs/commerce_pricing"
+        },
+        "availability": {
+          "$ref": "#/$defs/commerce_availability"
+        },
+        "review": {
+          "$ref": "#/$defs/commerce_review_asset"
+        }
+      }
+    },
+    "app_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference_name"],
+      "properties": {
+        "asc_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "badge": {
+          "type": "string",
+          "enum": ["live_event", "premiere", "challenge", "competition", "new_season", "major_update", "special_event"]
+        },
+        "deep_link": {
+          "$ref": "#/$defs/string_source"
+        },
+        "purchase_requirement": {
+          "$ref": "#/$defs/string_source"
+        },
+        "primary_locale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["high", "normal"]
+        },
+        "purpose": {
+          "type": "string",
+          "enum": ["appropriate_for_all_users", "attract_new_users", "keep_active_users_informed", "bring_back_lapsed_users"]
+        },
+        "territory_schedules": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/app_event_territory_schedule"
+          }
+        },
+        "localizations": {
+          "type": "object",
+          "description": "App event localizations keyed by App Store Connect locale.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/app_event_localization_source"
+          }
+        },
+        "media": {
+          "type": "object",
+          "description": "App event images and videos keyed by App Store Connect locale. Each media locale must also exist in app_events.*.localizations.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/app_event_media"
+          }
+        }
+      }
+    },
+    "app_event_territory_schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publish_start", "event_start", "event_end"],
+      "properties": {
+        "territories": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/territory_id"
+          }
+        },
+        "publish_start": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_start": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_end": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "app_event_localization_source": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "$ref": "#/$defs/app_event_localization"
+        }
+      ]
+    },
+    "app_event_localization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "short_description": {
+          "$ref": "#/$defs/string_source"
+        },
+        "long_description": {
+          "$ref": "#/$defs/string_source"
+        }
+      }
+    },
+    "app_event_media": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "card_image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "details_image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "card_video": {
+          "type": "string",
+          "minLength": 1
+        },
+        "details_video": {
+          "type": "string",
+          "minLength": 1
+        },
+        "preview_frame_time_code": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "app_privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "data_types": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/app_privacy_data_type"
+          }
+        },
+        "uses_tracking": {
+          "type": "boolean"
+        },
+        "tracking_domains": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "app_privacy_data_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "linked_to_user": {
+          "type": "boolean",
+          "default": false
+        },
+        "tracking": {
+          "type": "boolean",
+          "default": false
+        },
+        "purposes": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "app_platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/app_version"
+        }
+      }
+    },
+    "app_version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version_string"],
+      "properties": {
+        "version_string": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build_number": {
+          "type": "string",
+          "minLength": 1
+        },
+        "copyright": {
+          "$ref": "#/$defs/string_source"
+        },
+        "release": {
+          "$ref": "#/$defs/app_version_release"
+        },
+        "localizations": {
+          "type": "object",
+          "description": "Version localizations keyed by App Store Connect locale. Screenshot render templates in version media inherit strings from the localization for the same locale.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/app_version_localization_source"
+          }
+        },
+        "review": {
+          "$ref": "#/$defs/app_review"
+        },
+        "media": {
+          "type": "object",
+          "description": "Version media keyed by App Store Connect locale. Each locale with rendered screenshots must also exist in version.localizations.",
+          "default": {},
+          "propertyNames": {
+            "$ref": "#/$defs/localeKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/app_media_locale"
+          }
+        }
+      }
+    },
+    "app_version_release": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["manual", "after_approval", "scheduled"]
+        },
+        "earliest_release_date": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "app_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contact_first_name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "contact_last_name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "contact_phone": {
+          "$ref": "#/$defs/string_source"
+        },
+        "contact_email": {
+          "$ref": "#/$defs/string_source"
+        },
+        "demo_account_name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "demo_account_password": {
+          "$ref": "#/$defs/string_source"
+        },
+        "demo_account_required": {
+          "type": "boolean"
+        },
+        "notes": {
+          "$ref": "#/$defs/string_source"
+        },
+        "attachments": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "app_info_localization_source": {
+      "description": "AppInfo localization, either inline or a path to a JSON5 file.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to a JSON5 app info localization file."
+        },
+        {
+          "description": "Inline app info localization.",
+          "$ref": "#/$defs/app_info_localization"
+        }
+      ]
+    },
+    "app_info_localization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/string_source"
+        },
+        "subtitle": {
+          "$ref": "#/$defs/string_source"
+        },
+        "privacy_policy_url": {
+          "$ref": "#/$defs/string_source"
+        },
+        "privacy_choices_url": {
+          "$ref": "#/$defs/string_source"
+        },
+        "privacy_policy_text": {
+          "$ref": "#/$defs/string_source"
+        }
+      }
+    },
+    "app_version_localization_source": {
+      "description": "App version localization, either inline or a path to a JSON5 file. Extra JSON keys are used as screenshot render template variables.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to a JSON5 version localization file."
+        },
+        {
+          "description": "Inline app version localization.",
+          "$ref": "#/$defs/app_version_localization"
+        }
+      ]
+    },
+    "app_version_localization": {
+      "type": "object",
+      "description": "App Store version localization. Extra properties are available to screenshot render templates as placeholders, for example {{hero.title}}.",
+      "additionalProperties": {
+        "description": "Additional JSON value exposed to screenshot render templates for this version locale."
+      },
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "description": {
+          "$ref": "#/$defs/string_source"
+        },
+        "keywords": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/string_source"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "marketing_url": {
+          "$ref": "#/$defs/string_source"
+        },
+        "promotional_text": {
+          "$ref": "#/$defs/string_source"
+        },
+        "support_url": {
+          "$ref": "#/$defs/string_source"
+        },
+        "whats_new": {
+          "$ref": "#/$defs/string_source"
+        }
+      }
+    },
+    "app_media_locale": {
+      "type": "object",
+      "description": "Screenshot and app preview media for one locale. Used by app version media and custom product page media.",
+      "additionalProperties": false,
+      "properties": {
+        "screenshots": {
+          "type": "object",
+          "description": "Screenshot sets keyed by asc-sync display target such as iphone67, ipad13, mac, apple_tv, vision_pro, or watch_series10. Values can be ready image paths/globs/lists or an HTML render spec.",
+          "default": {},
+          "propertyNames": {
+            "enum": [
+              "iphone",
+              "ipad",
+              "mac",
+              "apple_tv",
+              "vision_pro",
+              "watch",
+              "iphone67",
+              "iphone65",
+              "iphone61",
+              "iphone58",
+              "iphone55",
+              "iphone47",
+              "iphone40",
+              "iphone35",
+              "ipad13",
+              "ipad129",
+              "ipad11",
+              "ipad105",
+              "ipad97",
+              "watch_ultra",
+              "watch_series10",
+              "watch_series7",
+              "watch_series4",
+              "watch_series3"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/media_screenshot_source"
+          }
+        },
+        "app_previews": {
+          "type": "object",
+          "description": "App preview video sets keyed by asc-sync preview target such as iphone_portrait, iphone_landscape, ipad13, desktop, tv, or vision.",
+          "default": {},
+          "propertyNames": {
+            "enum": [
+              "iphone",
+              "iphone_portrait",
+              "iphone_landscape",
+              "ipad",
+              "ipad_portrait",
+              "ipad_landscape",
+              "iphone67",
+              "iphone65",
+              "iphone61",
+              "iphone58",
+              "iphone55",
+              "iphone47",
+              "iphone40",
+              "iphone35",
+              "ipad13",
+              "ipad129",
+              "ipad11",
+              "ipad105",
+              "ipad97",
+              "desktop",
+              "tv",
+              "vision"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/media_path_list"
+          }
+        }
+      }
+    },
+    "media_path_list": {
+      "description": "A file path, directory, glob pattern, or non-empty list of paths/globs. Relative paths resolve from the asc.json directory.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "media_screenshot_source": {
+      "description": "Screenshot source. Use a path/glob/list for ready images, or render to generate screenshots from HTML before validate/apply.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/media_path_list"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "render"
+          ],
+          "properties": {
+            "render": {
+              "$ref": "#/$defs/media_screenshot_render"
+            }
+          }
+        }
+      ]
+    },
+    "media_screenshot_render": {
+      "type": "object",
+      "description": "Render App Store screenshots from HTML templates. Version media uses version.localizations[locale] strings; custom product page media uses custom_product_pages.*.localizations[locale] strings.",
+      "additionalProperties": false,
+      "required": [
+        "template",
+        "screens",
+        "frame"
+      ],
+      "properties": {
+        "template": {
+          "$ref": "#/$defs/media_path_list",
+          "description": "HTML template file, directory, glob, or list. Templates are resolved in lexical order and output file names use the HTML stem."
+        },
+        "screens": {
+          "$ref": "#/$defs/media_path_list",
+          "description": "Input screen image file, directory, glob, or list inserted into <asc-device-frame>. Use one image for all templates or the same number of images as templates."
+        },
+        "frame": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Device frame name. By default this is the PNG stem from assets/device-frames."
+        },
+        "frame_dir": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional directory containing device frame PNGs and Frames.json."
+        },
+        "output_dir": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional persistent directory for rendered PNGs. If omitted, validate/apply render into a temporary directory."
+        }
+      }
+    },
+    "string_source": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["$env"],
+          "properties": {
+            "$env": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
     },
     "capability": {
       "oneOf": [

@@ -1,4 +1,5 @@
 pub mod app;
+pub mod app_store;
 pub mod asc;
 pub mod auth;
 pub mod auth_store;
@@ -13,6 +14,9 @@ pub mod device;
 pub mod device_discovery;
 pub mod device_server;
 pub mod init_cmd;
+pub mod media_render;
+pub mod media_validate;
+pub mod metadata;
 pub mod notarize;
 pub mod revoke;
 pub mod schema;

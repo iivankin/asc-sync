@@ -2,7 +2,15 @@
 name = "asc-sync"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.94"
 default-run = "asc-sync"
+description = "CLI for reconciling App Store Connect provisioning resources from a JSON config."
+license = "Apache-2.0"
+repository = "https://github.com/iivankin/asc-sync"
+readme = "README.md"
+keywords = ["app-store-connect", "apple", "ios", "macos", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = ["assets/**"]
 
 [dependencies]
 anyhow = "1.0.102"
@@ -22,3 +30,9 @@ tar = "=0.4.45"
 tempfile = "3.27.0"
 time = { version = "0.3.44", features = ["formatting", "parsing"] }
 tokio = { version = "=1.49.0", features = ["macros", "net", "rt-multi-thread", "signal"] }
+json5 = { version = "=1.3.1", default-features = false }
+dotenvy = { version = "=0.15.7", default-features = false }
+glob = { version = "=0.3.3", default-features = false }
+md-5 = { version = "=0.11.0", default-features = false }
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
+tungstenite = { version = "=0.28.0", default-features = false, features = ["handshake"] }

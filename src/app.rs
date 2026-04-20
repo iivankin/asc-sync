@@ -5,11 +5,15 @@ use anyhow::{Result, ensure};
 use clap::Parser;
 
 use crate::{
+    app_store,
     asc::AscClient,
     auth_store, build_settings, bundle, bundle_team,
-    cli::{AuthCommand, Cli, Command, DeviceCommand, SigningCommand},
+    cli::{
+        AuthCommand, Cli, Command, DeviceCommand, MediaCommand, MetadataCommand,
+        MetadataKeywordsCommand, SigningCommand,
+    },
     config::Config,
-    config_io, device, init_cmd, notarize, revoke,
+    config_io, device, init_cmd, media_render, media_validate, metadata, notarize, revoke,
     scope::Scope,
     state::State,
     submit,
@@ -28,11 +32,24 @@ pub fn run() -> Result<()> {
         Command::Validate(args) => {
             let config = config_io::load_config(&args.config)?;
             config.validate()?;
+            validate_media(&args.config, &config)?;
             validate_signing_bundle(&args.config, &config)?;
             println!("config is valid");
             Ok(())
         }
+        Command::Media(MediaCommand::Validate(args)) => {
+            let config = config_io::load_config(&args.config)?;
+            config.validate()?;
+            validate_media(&args.config, &config)?;
+            Ok(())
+        }
+        Command::Metadata(MetadataCommand::Keywords(MetadataKeywordsCommand::Audit(args))) => {
+            metadata::run_keywords_audit(&args)
+        }
+        Command::Media(MediaCommand::Render(args)) => media_render::render(&args),
+        Command::Media(MediaCommand::Preview(args)) => media_render::preview(&args),
         Command::Submit(args) => submit::run(&args),
+        Command::SubmitForReview(args) => app_store::submit_for_review(&args),
         Command::Signing(SigningCommand::Import(args)) => run_signing_import(&args.config),
         Command::Signing(SigningCommand::PrintBuildSettings(args)) => {
             run_signing_print_build_settings(&args.config)
@@ -166,6 +183,9 @@ fn run_signing_print_build_settings(config_path: &Path) -> Result<()> {
 fn run_sync(mode: Mode, config_path: &Path) -> Result<()> {
     let config = config_io::load_config(config_path)?;
     config.validate()?;
+    if mode == Mode::Apply {
+        validate_media(config_path, &config)?;
+    }
 
     let team_id = config.team_id.as_str();
     let auth = auth_store::resolve_auth_context(team_id)?;
@@ -205,6 +225,7 @@ fn run_sync(mode: Mode, config_path: &Path) -> Result<()> {
                 active_scopes.len() > 1,
             )?;
         }
+        app_store::run_sync(config_path, &config, &client, mode)?;
         return Ok(());
     }
 
@@ -221,6 +242,7 @@ fn run_sync(mode: Mode, config_path: &Path) -> Result<()> {
                 present_scopes.len() > 1,
             )?;
         }
+        app_store::run_sync(config_path, &config, &client, mode)?;
         return Ok(());
     }
 
@@ -251,6 +273,28 @@ fn run_sync(mode: Mode, config_path: &Path) -> Result<()> {
         )?;
     }
 
+    app_store::run_sync(config_path, &config, &client, mode)?;
+
+    Ok(())
+}
+
+fn validate_media(config_path: &Path, config: &Config) -> Result<()> {
+    let summary = media_validate::validate_config(config_path, config)?;
+    if summary.screenshot_sets > 0
+        || summary.preview_sets > 0
+        || summary.extra_images > 0
+        || summary.extra_videos > 0
+    {
+        println!(
+            "media is valid: {} screenshot set(s), {} screenshot file(s), {} preview set(s), {} preview file(s), {} extra image(s), {} extra video(s)",
+            summary.screenshot_sets,
+            summary.screenshots,
+            summary.preview_sets,
+            summary.previews,
+            summary.extra_images,
+            summary.extra_videos
+        );
+    }
     Ok(())
 }
 

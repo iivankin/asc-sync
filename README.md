@@ -2,6 +2,30 @@
 
 `asc-sync` is a small Rust CLI that reconciles App Store Connect provisioning resources from a compact JSON config.
 
+## Install
+
+Install the latest release binary in one step on macOS/Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iivankin/asc-sync/main/install.sh | bash
+```
+
+By default this installs `asc-sync` into `~/.local/bin`.
+
+Install the latest release binary in one step on Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/iivankin/asc-sync/main/install.ps1 | iex"
+```
+
+This installs `asc-sync.exe` into `%USERPROFILE%\.local\bin` and adds that directory to your user `PATH` if needed.
+
+After the crate is published, you can also install it from crates.io:
+
+```bash
+cargo install asc-sync
+```
+
 Supported resource kinds:
 
 - bundle IDs
@@ -9,6 +33,7 @@ Supported resource kinds:
 - devices
 - modern Xcode 11+ signing certificates
 - provisioning profiles
+- existing App Store Connect app records, editable version metadata, review details, and media
 
 Current certificate support is intentionally limited to the modern unified types:
 
@@ -154,9 +179,66 @@ Pass the desired state with `--config asc.json`.
       "bundle_id": "desktop",
       "certs": ["direct"]
     }
+  },
+  "apps": {
+    "main": {
+      "bundle_id_ref": "main",
+      "shared": {
+        "primary_locale": "en-US",
+        "content_rights_declaration": "does_not_use_third_party_content"
+      },
+      "platforms": {
+        "ios": {
+          "version": {
+            "version_string": "1.4.0",
+            "build_number": "456",
+            "release": {
+              "type": "manual"
+            },
+            "localizations": {
+              "en-US": "./locale/ios/1.4.0/en-US.json5"
+            },
+            "review": {
+              "contact_first_name": "Ivan",
+              "contact_last_name": "Ivanov",
+              "contact_email": { "$env": "ASC_REVIEW_CONTACT_EMAIL" },
+              "contact_phone": { "$env": "ASC_REVIEW_CONTACT_PHONE" },
+              "demo_account_required": false,
+              "notes": { "$env": "ASC_REVIEW_NOTES" }
+            },
+            "media": {
+              "en-US": {
+                "screenshots": {
+                  "iphone67": {
+                    "render": {
+                      "template": "./screenshots/app-store/*.html",
+                      "screens": "./screens/en-US/*.png",
+                      "frame": "iPhone 16 Pro - Black Titanium - Portrait"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 ```
+
+Version localization files are JSON5 and use the same keys as inline version localization objects:
+
+```json5
+{
+  description: "Long App Store description",
+  keywords: ["sync", "provisioning"],
+  support_url: "https://acme.example/support",
+  whats_new: "Bug fixes"
+}
+```
+
+Media stays in the `media` blocks of `asc.json`; localization JSON5 files are for ASC text fields and render template variables.
 
 ## Commands
 
@@ -194,6 +276,19 @@ Apply the desired state:
 cargo run -- apply --config asc.json
 ```
 
+Audit live App Store version keywords before applying metadata changes:
+
+```bash
+cargo run -- metadata keywords audit --app 123456789 --version 1.2.3
+cargo run -- metadata keywords audit --config asc.json --app 123456789 --version 1.2.3 --blocked-term tracker --blocked-terms-file ./blocked-terms.txt
+cargo run -- metadata keywords audit --config asc.json --app 123456789 --version-id 987654321 --strict --output table
+```
+
+The audit reports duplicate keyword phrases, repeated phrases across locales, overlap with localized
+app name/subtitle text, character-budget usage, underfilled keyword fields, malformed separators,
+empty segments, and optional blocked terms. If multiple auth teams are imported, pass `--team-id`
+or `--config`.
+
 Submit a macOS Developer ID artifact for notarization and staple it on success:
 
 ```bash
@@ -217,6 +312,298 @@ App Store Connect before submitting.
 
 If `asc.json` contains more than one `bundle_ids` entry, `submit` requires `--bundle-id <logical-id>`
 to choose which app record to target.
+
+Synchronize App Store Connect metadata from the `apps` block:
+
+```bash
+cargo run -- plan --config asc.json
+cargo run -- apply --config asc.json
+```
+
+`apply` expects the App Store Connect app record to exist. If it is missing, `asc-sync`
+prints the required manual action and polls App Store Connect until the record appears,
+then continues automatically.
+
+Submit the configured version for review:
+
+```bash
+cargo run -- submit-for-review --config asc.json --app main --platform ios
+```
+
+`submit-for-review` is intentionally separate from `submit`. The config describes the
+desired version metadata and release policy; the command performs the review submission action.
+
+The `apps` block can also describe App Store resource families that live next to the version:
+
+```json5
+{
+  "apps": {
+    "main": {
+      "bundle_id_ref": "main",
+      "availability": {
+        "territories": { "mode": "include", "values": ["USA", "CAN"] }
+      },
+      "pricing": {
+        "base_territory": "USA",
+        "replace_future_schedule": true,
+        "schedule": [{ "price": "0.99" }]
+      },
+      "custom_product_pages": {
+        "summer": {
+          "name": "Summer 2026",
+          "deep_link": "myapp://summer",
+          "visible": true,
+          "localizations": {
+            "en-US": {
+              "promotional_text": "Try the summer flow",
+              "headline": "Summer-only onboarding"
+            }
+          },
+          "media": {
+            "en-US": {
+              "screenshots": {
+                "iphone67": {
+                  "render": {
+                    "template": "./screenshots/cpp/summer/*.html",
+                    "screens": "./screens/en-US/*.png",
+                    "frame": "iPhone 16 Pro - Black Titanium - Portrait",
+                    "output_dir": "./media/cpp/summer/en-US/iphone67"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "in_app_purchases": {
+        "coins_100": {
+          "product_id": "com.example.app.coins100",
+          "type": "consumable",
+          "reference_name": "100 Coins",
+          "localizations": {
+            "en-US": { "name": "100 Coins", "description": "A coin pack." }
+          },
+          "review": { "screenshot": "./review/coins100.png" }
+        }
+      },
+      "subscription_groups": {
+        "premium": {
+          "reference_name": "Premium",
+          "subscriptions": {
+            "monthly": {
+              "product_id": "com.example.app.premium.monthly",
+              "reference_name": "Premium Monthly",
+              "period": "one_month",
+              "group_level": 1,
+              "localizations": {
+                "en-US": { "name": "Monthly", "description": "Full access." }
+              }
+            }
+          }
+        }
+      },
+      "app_events": {
+        "launch": {
+          "reference_name": "Launch Challenge",
+          "badge": "challenge",
+          "territory_schedules": [{
+            "territories": ["USA"],
+            "publish_start": "2026-06-01T10:00:00Z",
+            "event_start": "2026-06-02T10:00:00Z",
+            "event_end": "2026-06-10T10:00:00Z"
+          }],
+          "localizations": {
+            "en-US": {
+              "name": "Launch Challenge",
+              "short_description": "Try the new mode.",
+              "long_description": "Complete tasks and unlock rewards."
+            }
+          },
+          "media": {
+            "en-US": { "card_image": "./events/launch/card.png" }
+          }
+        }
+      },
+      "privacy": {
+        "uses_tracking": false,
+        "data_types": [{
+          "type": "precise_location",
+          "linked_to_user": true,
+          "tracking": false,
+          "purposes": ["app_functionality"]
+        }]
+      },
+      "platforms": {
+        "ios": { "version": { "version_string": "1.2.3" } }
+      }
+    }
+  }
+}
+```
+
+Localizations in custom product pages, in-app purchases, subscription groups,
+subscriptions, and app events can be inline objects or JSON5 file paths. Custom product
+page screenshot render templates use the custom product page localization strings for
+that locale, including extra JSON5 keys such as `headline`. Pricing can use
+`price_point_id` directly, or `price`, which is resolved through the App Store Connect
+price point list for the configured base territory.
+
+Example custom product page localization file:
+
+```json5
+{
+  promotional_text: "Try the summer flow",
+  headline: "Summer-only onboarding"
+}
+```
+
+`apply` creates and updates safe metadata for custom product pages, IAPs, subscriptions,
+subscription groups, app events, localizations, and review/media assets. App privacy is a
+typed checklist because App Store privacy answers are not safely writable through this
+sync path. Existing commerce availability and IAP/subscription price changes are reported
+as manual/review-sensitive follow-ups instead of being silently mutated.
+
+Validate App Store media locally:
+
+```bash
+cargo run -- media validate --config asc.json
+```
+
+Render App Store screenshots from plain HTML:
+
+```bash
+cargo run -- media preview --input './screenshots/app-store/*.html' --size iphone67 --open
+cargo run -- media render --input './screenshots/app-store/*.html' --size iphone67 --output-dir './media/en-US/iphone'
+```
+
+`media render` uses headless Chrome/Chromium through the Chrome DevTools Protocol. It waits
+for document load, stylesheet readiness, fonts, image loading/decoding, and one animation
+frame before capturing. It does not read YAML and does not run Python. Pass
+`--chrome /path/to/chrome` or set `CHROME_BIN` if Chrome is not in a standard location.
+macOS discovery checks Chrome Stable, Beta, Dev, Canary, Chrome for Testing, and Chromium
+in `/Applications` and `~/Applications`.
+`--input` accepts one or more HTML files, directories, or glob patterns; directories and
+globs are sorted lexicographically. Output file names use the HTML file stem, so
+`01-home.html` renders to `01-home.png`. PNG output is flattened onto a white background.
+
+The same renderer can be used directly from `asc.json` for version media:
+
+```json5
+"localizations": {
+  "en-US": "./locale/ios/1.4.0/en-US.json5"
+},
+"media": {
+  "en-US": {
+    "screenshots": {
+      "iphone67": {
+        "render": {
+          "template": "./screenshots/app-store/*.html",
+          "screens": "./screens/en-US/*.png",
+          "frame": "iPhone 16 Pro - Black Titanium - Portrait",
+          "output_dir": "./media/en-US/iphone67"
+        }
+      }
+    }
+  }
+}
+```
+
+Config render output is temporary by default. Set `output_dir` to persist the rendered
+PNGs; `validate`/`apply` still render before validation/upload, validate the resulting
+files as normal App Store screenshots, and upload them in resolved template order. The
+render strings come from `version.localizations[locale]`, so extra JSON5 keys such as
+`hero.title` are available as `{{hero.title}}`.
+
+Bundled device frames can wrap each HTML template:
+
+```bash
+cargo run -- media preview \
+  --input './screenshots/app-store/*.html' \
+  --screen './screens/app.png' \
+  --size iphone67 \
+  --frame 'iPhone 16 Pro - Black Titanium - Portrait' \
+  --locale en-US \
+  --strings './locale/en-US.json5' \
+  --open
+
+cargo run -- media render \
+  --input './screenshots/app-store/*.html' \
+  --screen './screens/app.png' \
+  --size iphone67 \
+  --frame 'iPhone 16 Pro - Black Titanium - Portrait' \
+  --locale en-US \
+  --strings './locale/en-US.json5' \
+  --output-dir './media/en-US/iphone'
+```
+
+Frame names are PNG stems from the device frame manifest on `https://orbitstorage.dev`.
+When a frame is needed and no local frame directory is configured, `asc-sync` downloads
+`manifest.json`, verifies MD5/size for the required frame assets, and caches them in
+`~/.asc-sync/device-frames`. It downloads only the requested frame PNG plus shared
+metadata files.
+
+For local development or private frames, use `ASC_SYNC_FRAMES_DIR` or `--frame-dir` to
+point at a directory with device frame PNG files plus `Frames.json`. Set
+`ASC_SYNC_DEVICE_FRAMES_URL` to override the remote manifest base URL.
+
+Upload the local frame directory to Orbit Storage:
+
+```bash
+scripts/upload-device-frames.sh
+```
+
+The upload script reads `assets/device-frames`, uploads files to
+`https://orbitstorage.dev/assets/device-frames`, and writes a sibling `manifest.json`
+with file sizes and MD5 hashes. It uses the same Cloudflare R2 environment variables as
+the schema upload workflow: `CLOUDFLARE_R2_ACCESS_KEY_ID`,
+`CLOUDFLARE_R2_SECRET_ACCESS_KEY`, `CLOUDFLARE_R2_BUCKET`, and
+`CLOUDFLARE_R2_ENDPOINT`.
+
+`--screen` accepts one image for all
+HTML templates, or a file/directory/glob with the same number of images as templates.
+When `--frame` is set, the HTML template must contain `<asc-device-frame></asc-device-frame>`
+where the framed screen should appear. The screen is precomposed into the frame as a PNG,
+then that framed asset is scaled by normal CSS layout. Screen placement uses
+`Frames.json` geometry. If `Frames.json` does not contain the frame, `asc-sync` falls back
+to detecting the inner transparent
+screen area from the frame PNG alpha channel.
+
+`--strings` accepts JSON or JSON5. String placeholders are HTML-escaped and can use dot
+paths. Built-in placeholders are `{{locale}}`, `{{id}}`, and `{{asc_id}}`.
+
+Use `--size` for App Store named sizes such as `iphone67`, `iphone65`, `ipad13`, `mac`,
+`apple_tv`, or `vision_pro`. Use `--viewport 1320x2868` for a custom exact viewport.
+HTML templates should fill the browser viewport and place the frame explicitly:
+
+```html
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; }
+    body { background: linear-gradient(#f8f1dc, #d5e5ff); }
+    .shot { width: 100vw; height: 100vh; display: grid; grid-template-columns: 1fr 48%; align-items: center; padding: 8vw; box-sizing: border-box; }
+    asc-device-frame { width: 100%; }
+  </style>
+</head>
+<body>
+  <main class="shot">
+    <h1>{{hero.title}}</h1>
+    <asc-device-frame fit="cover"></asc-device-frame>
+  </main>
+</body>
+</html>
+```
+
+Media validation also runs before `apply`. Screenshots are checked for count, extension,
+and Apple-accepted dimensions for the configured display type. App previews are checked
+for count, extension, file size, resolution, duration, frame rate, progressive video, and
+H.264/ProRes 422 HQ codec. Custom product page media uses the same screenshot/preview
+rules. IAP and subscription review screenshots are checked as image files. App event
+images are checked as 1920x1080 or 3840x2160 assets, and app event videos are checked as
+16:9 progressive H.264/ProRes assets up to 60fps. Preview and event video validation
+requires `ffprobe` from FFmpeg.
 
 If you change `team_id` in `asc.json`, the next mutating config-based command that opens
 `signing.ascbundle` hard-resets it to an empty state for the new team. This is a destructive
@@ -399,7 +786,7 @@ Profile type values:
 - `mac_catalyst_app_store`
 - `mac_catalyst_app_direct`
 
-Logical keys for `bundle_ids`, `devices`, `certs`, and `profiles` are stable IDs, not display names.
+Logical keys for `bundle_ids`, `devices`, `certs`, `profiles`, and `apps` are stable IDs, not display names.
 They must use only ASCII letters, digits, `.`, `-`, and `_`.
 
 The JSON Schema is checked into [schema/asc-sync.schema.json](/Users/ilyai/Developer/personal/asc-sync/schema/asc-sync.schema.json).
