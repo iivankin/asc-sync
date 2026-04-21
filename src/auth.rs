@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StoredAuthRecord {
+    #[serde(default)]
+    pub display_name: String,
     pub issuer_id: String,
     pub key_id: String,
     pub private_key_pem: String,
@@ -105,4 +107,31 @@ fn expand_home(path: &Path) -> Result<PathBuf> {
     }
 
     Ok(path.to_path_buf())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::StoredAuthRecord;
+
+    #[test]
+    fn stored_auth_record_serializes_display_name() {
+        let record = StoredAuthRecord {
+            display_name: "Example Team".to_owned(),
+            issuer_id: "issuer".to_owned(),
+            key_id: "key".to_owned(),
+            private_key_pem: "pem".to_owned(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(record).unwrap(),
+            json!({
+                "displayName": "Example Team",
+                "issuerId": "issuer",
+                "keyId": "key",
+                "privateKeyPem": "pem"
+            })
+        );
+    }
 }

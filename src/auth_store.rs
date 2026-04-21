@@ -2,7 +2,7 @@ use std::{
     collections::BTreeSet,
     io::{self, IsTerminal, Write},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -20,6 +20,37 @@ const PRIVATE_KEY_ENV: &str = "ASC_PRIVATE_KEY";
 const PRIVATE_KEY_PATH_ENV: &str = "ASC_PRIVATE_KEY_PATH";
 const ASC_CLI_KEYCHAIN_SERVICE: &str = "asc";
 const ASC_CLI_KEYCHAIN_ACCOUNT_PREFIX: &str = "asc:credential:";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredAuthEntry {
+    pub team_id: String,
+    pub display_name: String,
+}
+
+impl StoredAuthEntry {
+    pub fn selection_label(&self, entries: &[Self]) -> String {
+        let display_name = self.display_name_or_team_id();
+        if entries
+            .iter()
+            .filter(|entry| entry.display_name_or_team_id() == display_name)
+            .count()
+            > 1
+        {
+            format!("{display_name} ({})", self.team_id)
+        } else {
+            display_name.to_owned()
+        }
+    }
+
+    fn display_name_or_team_id(&self) -> &str {
+        let display_name = self.display_name.trim();
+        if display_name.is_empty() {
+            &self.team_id
+        } else {
+            display_name
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, Default)]
 struct AscCliConfig {
@@ -59,28 +90,43 @@ struct AscCliKeychainPayload {
     private_key_pem: String,
 }
 
-pub fn import_auth_interactively() -> Result<()> {
-    import_auth_interactively_with_team_id().map(|_| ())
+struct ImportedAuthRecord {
+    record: StoredAuthRecord,
+    suggested_display_name: Option<String>,
 }
 
-pub fn import_auth_interactively_with_team_id() -> Result<String> {
+pub fn import_auth_interactively() -> Result<()> {
+    import_auth_interactively_with_team_id(false).map(|_| ())
+}
+
+pub fn import_auth_interactively_with_team_id(allow_skip: bool) -> Result<Option<String>> {
     ensure!(
         io::stdin().is_terminal() && io::stderr().is_terminal(),
         "auth import requires an interactive terminal"
     );
 
+    if allow_skip && !prompt_yes_no("Add App Store Connect authorization now? [y/N]: ", false)? {
+        return Ok(None);
+    }
+
     let imported = maybe_import_from_asc_cli()?;
-    let record = match imported {
-        Some(record) => record,
-        None => prompt_manual_auth_record()?,
+    let (mut record, suggested_display_name) = match imported {
+        Some(imported) => (imported.record, imported.suggested_display_name),
+        None => (prompt_manual_auth_record()?, None),
     };
 
     let team_id = prompt_required("Team ID")?;
+    let suggested_display_name = suggested_display_name.filter(|value| !value.trim().is_empty());
+    let default_display_name = suggested_display_name.as_deref().unwrap_or(&team_id);
+    record.display_name = prompt_with_default("Team display name", Some(default_display_name))?;
     let _ = record.clone().into_context()?;
     store_auth_record(&team_id, &record)?;
 
-    println!("Stored App Store Connect auth for team {team_id} in ~/.asc-sync.");
-    Ok(team_id)
+    println!(
+        "Stored App Store Connect auth for {} in ~/.asc-sync.",
+        record.display_name
+    );
+    Ok(Some(team_id))
 }
 
 pub fn resolve_auth_context(team_id: &str) -> Result<AuthContext> {
@@ -123,6 +169,27 @@ pub fn stored_team_ids() -> Result<Vec<String>> {
     system::list_stored_asc_auth_team_ids()
 }
 
+pub fn stored_auth_entries() -> Result<Vec<StoredAuthEntry>> {
+    let mut entries = stored_team_ids()?
+        .into_iter()
+        .map(|team_id| {
+            let display_name = load_auth_record(&team_id)?
+                .map(|record| record.display_name)
+                .unwrap_or_default();
+            Ok(StoredAuthEntry {
+                team_id,
+                display_name,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    entries.sort_by(|left, right| {
+        left.display_name_or_team_id()
+            .cmp(right.display_name_or_team_id())
+            .then_with(|| left.team_id.cmp(&right.team_id))
+    });
+    Ok(entries)
+}
+
 pub fn resolve_auth_record(team_id: &str) -> Result<StoredAuthRecord> {
     if let Some(record) = load_auth_record(team_id)? {
         return Ok(record);
@@ -137,7 +204,7 @@ pub fn resolve_auth_record(team_id: &str) -> Result<StoredAuthRecord> {
     );
 }
 
-fn maybe_import_from_asc_cli() -> Result<Option<StoredAuthRecord>> {
+fn maybe_import_from_asc_cli() -> Result<Option<ImportedAuthRecord>> {
     let Some(config_path) = asc_cli_config_path_if_available()? else {
         return Ok(None);
     };
@@ -171,7 +238,10 @@ fn maybe_import_from_asc_cli() -> Result<Option<StoredAuthRecord>> {
     };
 
     match load_asc_cli_profile(&config, &selected_profile)? {
-        Some(record) => Ok(Some(record)),
+        Some(record) => Ok(Some(ImportedAuthRecord {
+            record,
+            suggested_display_name: suggested_asc_cli_display_name(&selected_profile),
+        })),
         None => {
             eprintln!(
                 "Could not resolve asccli profile `{selected_profile}`. Falling back to manual input."
@@ -228,6 +298,7 @@ fn load_env_auth_record() -> Result<Option<StoredAuthRecord>> {
     };
 
     Ok(Some(StoredAuthRecord {
+        display_name: String::new(),
         issuer_id,
         key_id,
         private_key_pem,
@@ -243,6 +314,7 @@ fn prompt_manual_auth_record() -> Result<StoredAuthRecord> {
         String::from_utf8(private_key_pem).context("private key file is not valid UTF-8 PEM")?;
 
     Ok(StoredAuthRecord {
+        display_name: String::new(),
         issuer_id,
         key_id,
         private_key_pem,
@@ -274,6 +346,8 @@ fn asc_cli_config_path_if_available() -> Result<Option<PathBuf>> {
 fn asc_cli_installed() -> Result<bool> {
     let status = Command::new("which")
         .arg("asc")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .context("failed to check whether asccli is installed")?;
     Ok(status.success())
@@ -318,6 +392,10 @@ fn asc_cli_default_profile(config: &AscCliConfig, profiles: &[String]) -> Option
         return Some("default".to_owned());
     }
     None
+}
+
+fn suggested_asc_cli_display_name(profile: &str) -> Option<String> {
+    (profile != "default").then(|| profile.to_owned())
 }
 
 fn has_asc_cli_legacy_credentials(config: &AscCliConfig) -> bool {
@@ -365,6 +443,7 @@ fn load_asc_cli_profile_from_keychain(profile: &str) -> Result<Option<StoredAuth
     };
 
     Ok(Some(StoredAuthRecord {
+        display_name: String::new(),
         issuer_id: payload.issuer_id,
         key_id: payload.key_id,
         private_key_pem,
@@ -378,6 +457,7 @@ fn load_asc_cli_file_record(
 ) -> Result<StoredAuthRecord> {
     let pem = read_private_key_pem(Path::new(private_key_path))?;
     Ok(StoredAuthRecord {
+        display_name: String::new(),
         issuer_id: issuer_id.to_owned(),
         key_id: key_id.to_owned(),
         private_key_pem: String::from_utf8(pem)
@@ -449,5 +529,53 @@ fn prompt_yes_no(prompt: &str, default_yes: bool) -> Result<bool> {
             "n" | "no" => return Ok(false),
             _ => eprintln!("Please answer y or n."),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StoredAuthEntry;
+
+    #[test]
+    fn stored_auth_entry_selection_label_hides_unique_team_ids() {
+        let entries = vec![StoredAuthEntry {
+            team_id: "TEAM123456".to_owned(),
+            display_name: "Example Team".to_owned(),
+        }];
+
+        assert_eq!(entries[0].selection_label(&entries), "Example Team");
+    }
+
+    #[test]
+    fn stored_auth_entry_selection_label_disambiguates_duplicate_display_names() {
+        let entries = vec![
+            StoredAuthEntry {
+                team_id: "TEAM123456".to_owned(),
+                display_name: "Example Team".to_owned(),
+            },
+            StoredAuthEntry {
+                team_id: "TEAM654321".to_owned(),
+                display_name: "Example Team".to_owned(),
+            },
+        ];
+
+        assert_eq!(
+            entries[0].selection_label(&entries),
+            "Example Team (TEAM123456)"
+        );
+        assert_eq!(
+            entries[1].selection_label(&entries),
+            "Example Team (TEAM654321)"
+        );
+    }
+
+    #[test]
+    fn stored_auth_entry_selection_label_falls_back_to_team_id_for_empty_display_name() {
+        let entries = vec![StoredAuthEntry {
+            team_id: "TEAM123456".to_owned(),
+            display_name: String::new(),
+        }];
+
+        assert_eq!(entries[0].selection_label(&entries), "TEAM123456");
     }
 }
