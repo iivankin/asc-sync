@@ -453,7 +453,7 @@ fn resolve_device_server_url(config: &Config) -> Result<Url> {
 
 fn device_server_http_client() -> Result<Client> {
     Client::builder()
-        .user_agent("asc-sync/0.1.0")
+        .user_agent(concat!("asc-sync/", env!("CARGO_PKG_VERSION")))
         .build()
         .context("failed to create device server HTTP client")
 }

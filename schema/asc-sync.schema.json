@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.0.json",
+  "$id": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.1.json",
   "title": "asc-sync config",
   "type": "object",
   "additionalProperties": false,

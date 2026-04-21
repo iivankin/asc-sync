@@ -99,7 +99,7 @@ Pass the desired state with `--config asc.json`.
 
 ```json
 {
-  "$schema": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.0.json",
+  "$schema": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.1.json",
   "_description": "This file is documented by its `$schema`. Start with `ascs --help` for the common workflow.",
   "team_id": "TEAMID1234",
   "bundle_ids": {
@@ -768,6 +768,11 @@ Capabilities with settings use compact object forms:
   { "apple_id_auth": { "app_consent": "primary_app_consent" } }
 ]
 ```
+
+App Store Connect may report `IN_APP_PURCHASE` as an enabled bundle capability
+even when the config omits it. `asc-sync` treats that capability as
+App-Store-Connect-owned for disables, because ASC rejects deletion for universal
+App IDs.
 
 Profile type values:
 

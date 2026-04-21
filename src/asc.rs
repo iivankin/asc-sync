@@ -259,7 +259,7 @@ struct ProfileResponseWithIncluded {
 impl AscClient {
     pub fn new(auth: AuthContext) -> Result<Self> {
         let http = Client::builder()
-            .user_agent("asc-sync/0.1.0")
+            .user_agent(concat!("asc-sync/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(30))
             .timeout(Duration::from_secs(180))
             .build()

@@ -402,6 +402,10 @@ impl<'a> SyncEngine<'a> {
                 continue;
             }
 
+            if !can_delete_bundle_capability(current_type) {
+                continue;
+            }
+
             self.record(
                 ChangeKind::Delete,
                 format!("bundle_id.{bundle_id_name}.capability.{current_type}"),
@@ -989,6 +993,12 @@ fn random_password() -> String {
         .collect()
 }
 
+fn can_delete_bundle_capability(capability_type: &str) -> bool {
+    // ASC exposes In-App Purchase as a bundle capability, but rejects disabling
+    // it for universal App IDs with a 403 security error.
+    capability_type != "IN_APP_PURCHASE"
+}
+
 fn managed_certificate_scope(kind: &str) -> Option<Scope> {
     match kind {
         "DEVELOPMENT" => Some(Scope::Developer),
@@ -1119,7 +1129,7 @@ fn managed_profile_scope(kind: &str) -> Option<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use super::Workspace;
+    use super::{Workspace, can_delete_bundle_capability};
     use tempfile::tempdir;
 
     #[test]
@@ -1140,5 +1150,11 @@ mod tests {
 
         assert!(runtime.cert_artifacts().is_empty());
         assert!(runtime.profile_artifacts().is_empty());
+    }
+
+    #[test]
+    fn in_app_purchase_capability_is_not_deleted() {
+        assert!(!can_delete_bundle_capability("IN_APP_PURCHASE"));
+        assert!(can_delete_bundle_capability("ASSOCIATED_DOMAINS"));
     }
 }

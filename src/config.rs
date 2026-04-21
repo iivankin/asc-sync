@@ -2447,7 +2447,7 @@ mod tests {
     fn accepts_published_schema_field() {
         let config = serde_json::from_str::<Config>(
             r#"{
-                "$schema": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.0.json",
+                "$schema": "https://orbitstorage.dev/schemas/asc-sync.schema-0.1.1.json",
                 "team_id": "TEAM123"
             }"#,
         )
@@ -2456,7 +2456,7 @@ mod tests {
         config.validate().unwrap();
         assert_eq!(
             config.schema.as_deref(),
-            Some("https://orbitstorage.dev/schemas/asc-sync.schema-0.1.0.json")
+            Some("https://orbitstorage.dev/schemas/asc-sync.schema-0.1.1.json")
         );
     }
 
