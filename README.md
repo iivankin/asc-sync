@@ -617,9 +617,12 @@ On the first `apply`, if `signing.ascbundle` does not exist yet, `asc-sync`:
 - creates `signing.ascbundle` next to `asc.json`
 
 When `apply` needs to create a `developer_id_application` or `developer_id_installer` certificate,
-it pauses in an interactive terminal, prints the generated CSR path, asks you to create the
-matching Developer ID certificate in Certificates, Identifiers & Profiles, and then polls
-App Store Connect until the new certificate appears so it can download and import it automatically.
+it pauses in an interactive terminal, opens the Apple Developer certificate page, reveals the
+generated CSR in Finder, asks you to create the matching Developer ID certificate in Certificates,
+Identifiers & Profiles, and then polls App Store Connect until the new certificate appears so it
+can download and import it automatically. You do not need to manually import the downloaded `.cer`
+for this flow; `asc-sync` builds the PKCS#12 payload, imports it into the login keychain, and saves
+it into `signing.ascbundle`.
 
 For `developer_id_application`, `apply` also expects Apple to expose the new certificate back
 through the API so `mac_app_direct` provisioning profiles can reference it.
@@ -637,6 +640,31 @@ Print the recommended manual-signing settings for each managed provisioning prof
 ```bash
 cargo run -- signing print-build-settings --config asc.json
 ```
+
+Inspect a local or copied signing bundle without printing secrets:
+
+```bash
+cargo run -- signing inspect --config asc.json
+cargo run -- signing inspect --config asc.json --from ../OtherProject/signing.ascbundle
+```
+
+The inspect output prints the stored team ID, App IDs, devices, certificates, profiles, artifact
+presence, expiration status when each scope can be unlocked, and warnings for dangling references.
+If the bundle belongs to the same team, it also prints the `adopt` command for reusing those
+certificates in another project.
+
+Reuse matching certificates from another project bundle without carrying over that project's App
+IDs, devices, or provisioning profiles:
+
+```bash
+cargo run -- signing adopt --config asc.json --from ../OtherProject/signing.ascbundle
+cargo run -- apply --config asc.json
+cargo run -- signing import --config asc.json
+```
+
+`adopt` only copies certificates whose logical names and kinds match the target config. The next
+`apply` creates fresh profiles for the target project using those certificates, avoiding another
+limited Apple certificate slot.
 
 Create a remote iPhone/iPad registration token against the shared device server:
 
@@ -746,6 +774,8 @@ Password handling:
   - interactive prompt, where an empty answer skips that scope
 - if you only know one password, only that scope is unlocked and processed
 - `signing import` imports unlocked `.p12` bundles into `~/Library/Keychains/login.keychain-db` and also installs unlocked provisioning profiles into `~/Library/MobileDevice/Provisioning Profiles/<uuid>.mobileprovision`
+- `signing inspect` prints bundle contents and warnings without printing bundle passwords or `.p12` passwords
+- `signing adopt` reuses same-team certificates from another bundle without copying App IDs, devices, or provisioning profiles
 - `signing print-build-settings` prints `DEVELOPMENT_TEAM`, `PROVISIONING_PROFILE_SPECIFIER`, `PROVISIONING_PROFILE`, and the recommended `CODE_SIGN_IDENTITY` for each unlocked managed profile
 - `apply` also installs the provisioning profiles it just reconciled into `~/Library/MobileDevice/Provisioning Profiles/<uuid>.mobileprovision`
 

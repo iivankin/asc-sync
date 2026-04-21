@@ -17,12 +17,21 @@ use crate::{
     system,
 };
 
+const DEVELOPER_CERTIFICATE_CREATE_URL: &str =
+    "https://developer.apple.com/account/resources/certificates/add";
+
 struct PreparedCertificate {
     apple_id: Option<String>,
     kind: String,
     serial_number: String,
     p12_password: String,
     pkcs12: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ManualCertificateHelperStatus {
+    opened_portal: bool,
+    revealed_csr: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1082,9 +1091,33 @@ fn wait_for_manual_developer_id_certificate(
     display_name: &str,
     generated: &system::GeneratedCsr,
 ) -> Result<Certificate> {
+    let helper_status = open_manual_certificate_helpers(&generated.csr_path);
+
     println!("Manual action required for cert {logical_name}.");
+    if helper_status.opened_portal {
+        println!("Opened Apple Developer certificate page:");
+    } else {
+        println!("Open Apple Developer certificate page:");
+    }
+    println!("{DEVELOPER_CERTIFICATE_CREATE_URL}");
     println!("Create a {display_name} certificate in Certificates, Identifiers & Profiles.");
-    println!("Upload this CSR file: {}", generated.csr_path.display());
+    if helper_status.revealed_csr {
+        println!(
+            "Finder opened with this CSR selected: {}",
+            generated.csr_path.display()
+        );
+        println!("Drag the selected certificate.csr file into the CSR upload field.");
+    } else {
+        println!("CSR file: {}", generated.csr_path.display());
+        println!("Upload that certificate.csr file into the CSR upload field.");
+    }
+    println!("Leave this command running after you create the certificate.");
+    println!(
+        "Do not manually import the downloaded .cer into Keychain for this flow; asc-sync will download the issued certificate, build a PKCS#12 bundle with the generated private key, import it into the login keychain, and save it into the signing bundle when apply finishes."
+    );
+    println!(
+        "For this Mac there is no extra bundle step; on another Mac or CI, import signing.ascbundle later with `asc-sync signing import --config <asc.json>` and the release bundle password."
+    );
     println!(
         "Waiting for App Store Connect to publish the new certificate so asc-sync can download it automatically."
     );
@@ -1105,6 +1138,26 @@ fn wait_for_manual_developer_id_certificate(
 
         thread::sleep(Duration::from_secs(5));
     }
+}
+
+fn open_manual_certificate_helpers(csr_path: &Path) -> ManualCertificateHelperStatus {
+    let mut status = ManualCertificateHelperStatus {
+        opened_portal: true,
+        revealed_csr: true,
+    };
+
+    if let Err(error) = system::open_url(DEVELOPER_CERTIFICATE_CREATE_URL) {
+        status.opened_portal = false;
+        eprintln!(
+            "warning: failed to open Apple Developer certificate page automatically: {error:#}"
+        );
+    }
+    if let Err(error) = system::reveal_in_finder(csr_path) {
+        status.revealed_csr = false;
+        eprintln!("warning: failed to reveal CSR in Finder automatically: {error:#}");
+    }
+
+    status
 }
 
 fn managed_profile_scope(kind: &str) -> Option<Scope> {

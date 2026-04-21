@@ -44,8 +44,38 @@ pub struct SigningArgs {
 #[derive(Debug, Subcommand)]
 pub enum SigningCommand {
     Import(SigningArgs),
+    /// Print signing bundle contents without revealing passwords.
+    Inspect(SigningInspectArgs),
     PrintBuildSettings(SigningArgs),
+    /// Reuse matching certificates from another same-team signing bundle.
+    Adopt(SigningAdoptArgs),
     Merge(SigningMergeArgs),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct SigningInspectArgs {
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
+    pub config: PathBuf,
+    #[arg(
+        long,
+        value_name = "FILE",
+        value_hint = ValueHint::FilePath,
+        help = "Inspect this bundle instead of the config-adjacent signing.ascbundle."
+    )]
+    pub from: Option<PathBuf>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct SigningAdoptArgs {
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
+    pub config: PathBuf,
+    #[arg(
+        long,
+        value_name = "FILE",
+        value_hint = ValueHint::FilePath,
+        help = "Source signing.ascbundle to adopt reusable certificates from."
+    )]
+    pub from: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]

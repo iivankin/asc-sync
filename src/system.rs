@@ -42,6 +42,25 @@ pub fn downloads_dir() -> Result<PathBuf> {
     Ok(PathBuf::from(home).join("Downloads"))
 }
 
+pub fn open_url(url: &str) -> Result<()> {
+    let status = Command::new("open")
+        .arg(url)
+        .status()
+        .context("failed to execute open")?;
+    ensure!(status.success(), "open failed with status {status}");
+    Ok(())
+}
+
+pub fn reveal_in_finder(path: &Path) -> Result<()> {
+    let status = Command::new("open")
+        .arg("-R")
+        .arg(path)
+        .status()
+        .context("failed to execute open -R")?;
+    ensure!(status.success(), "open -R failed with status {status}");
+    Ok(())
+}
+
 pub fn provisioning_profiles_dir() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME is not set")?;
     Ok(PathBuf::from(home).join("Library/MobileDevice/Provisioning Profiles"))

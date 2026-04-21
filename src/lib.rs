@@ -21,6 +21,7 @@ pub mod notarize;
 pub mod revoke;
 pub mod schema;
 pub mod scope;
+pub mod signing_bundle;
 pub mod state;
 pub mod submit;
 pub mod sync;

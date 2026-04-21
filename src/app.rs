@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use age::secrecy::ExposeSecret;
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use clap::Parser;
 
 use crate::{
@@ -15,6 +15,7 @@ use crate::{
     config::Config,
     config_io, device, init_cmd, media_render, media_validate, metadata, notarize, revoke,
     scope::Scope,
+    signing_bundle,
     state::State,
     submit,
     sync::{ChangeKind, Mode, SyncEngine, Workspace},
@@ -51,8 +52,14 @@ pub fn run() -> Result<()> {
         Command::Submit(args) => submit::run(&args),
         Command::SubmitForReview(args) => app_store::submit_for_review(&args),
         Command::Signing(SigningCommand::Import(args)) => run_signing_import(&args.config),
+        Command::Signing(SigningCommand::Inspect(args)) => {
+            run_signing_inspect(&args.config, args.from.as_deref())
+        }
         Command::Signing(SigningCommand::PrintBuildSettings(args)) => {
             run_signing_print_build_settings(&args.config)
+        }
+        Command::Signing(SigningCommand::Adopt(args)) => {
+            run_signing_adopt(&args.config, &args.from)
         }
         Command::Signing(SigningCommand::Merge(args)) => {
             let workspace = Workspace::from_config_path(&args.config);
@@ -124,6 +131,16 @@ fn run_signing_import(config_path: &Path) -> Result<()> {
     Ok(())
 }
 
+fn run_signing_inspect(config_path: &Path, bundle_path: Option<&Path>) -> Result<()> {
+    let config = config_io::load_config(config_path)?;
+    config.validate()?;
+    let workspace = Workspace::from_config_path(config_path);
+    let bundle_path = bundle_path.unwrap_or(workspace.bundle_path.as_path());
+    let report = signing_bundle::inspect_bundle(&workspace, bundle_path, &config)?;
+    print!("{report}");
+    Ok(())
+}
+
 fn run_signing_print_build_settings(config_path: &Path) -> Result<()> {
     let config = config_io::load_config(config_path)?;
     config.validate()?;
@@ -178,6 +195,103 @@ fn run_signing_print_build_settings(config_path: &Path) -> Result<()> {
 
     ensure!(printed_any, "no managed provisioning profiles found");
     Ok(())
+}
+
+fn run_signing_adopt(config_path: &Path, source_bundle_path: &Path) -> Result<()> {
+    let config = config_io::load_config(config_path)?;
+    config.validate()?;
+    ensure!(
+        source_bundle_path.exists(),
+        "source signing bundle {} does not exist",
+        source_bundle_path.display()
+    );
+
+    let workspace = Workspace::from_config_path(config_path);
+    let source_state = bundle::load_state(source_bundle_path).with_context(|| {
+        format!(
+            "failed to read source signing bundle {}",
+            source_bundle_path.display()
+        )
+    })?;
+    source_state.ensure_team(&config.team_id).with_context(|| {
+        format!(
+            "source signing bundle {} does not match current team_id",
+            source_bundle_path.display()
+        )
+    })?;
+
+    let source_passwords =
+        bundle::resolve_existing_passwords(source_bundle_path, &signing_bundle::scope_array())?;
+    ensure!(
+        !source_passwords.is_empty(),
+        "no source signing bundle sections were unlocked"
+    );
+
+    let target_passwords = resolve_adopt_target_passwords(
+        &workspace,
+        &config.team_id,
+        source_bundle_path,
+        &source_passwords,
+    )?;
+    let summary = signing_bundle::adopt_certificates(
+        &workspace,
+        &config,
+        source_bundle_path,
+        &source_passwords,
+        &target_passwords,
+    )?;
+
+    println!(
+        "Adopted signing certificates into {} from {}.",
+        workspace.bundle_path.display(),
+        source_bundle_path.display()
+    );
+    println!("Adopted {} certificate(s).", summary.adopted_certs);
+    if !summary.skipped_certs.is_empty() {
+        println!(
+            "Skipped {} expired certificate(s): {}.",
+            summary.skipped_certs.len(),
+            summary.skipped_certs.join(", ")
+        );
+    }
+    println!(
+        "Run `asc-sync apply --config {}` to create profiles for this project with the reused certificates.",
+        config_path.display()
+    );
+    println!(
+        "Then run `asc-sync signing import --config {}` on machines that need to sign builds.",
+        config_path.display()
+    );
+    Ok(())
+}
+
+fn resolve_adopt_target_passwords(
+    workspace: &Workspace,
+    team_id: &str,
+    source_bundle_path: &Path,
+    source_passwords: &std::collections::BTreeMap<Scope, age::secrecy::SecretString>,
+) -> Result<std::collections::BTreeMap<Scope, age::secrecy::SecretString>> {
+    if !workspace.bundle_path.exists() {
+        let passwords = bundle::bootstrap_bundle(&workspace.bundle_path, team_id)?;
+        print_bootstrap_passwords(workspace, &passwords);
+        return Ok(passwords);
+    }
+
+    let passwords =
+        if signing_bundle::same_existing_file(source_bundle_path, &workspace.bundle_path)? {
+            source_passwords.clone()
+        } else {
+            bundle::resolve_existing_passwords(
+                &workspace.bundle_path,
+                &signing_bundle::scope_array(),
+            )?
+        };
+    ensure!(
+        passwords.len() == Scope::ALL.len(),
+        "adopt requires both developer and release bundle passwords for existing target bundle {}",
+        workspace.bundle_path.display()
+    );
+    Ok(passwords)
 }
 
 fn run_sync(mode: Mode, config_path: &Path) -> Result<()> {
